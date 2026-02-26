@@ -46,6 +46,7 @@
   /* ── MAIN VIEW ── */
   #main-container { flex:1; position:relative; overflow:hidden; }
   #roadview { width:100%; height:100%; background:#1a1000; }
+  #roadview canvas, #roadview img { transition: opacity 0.2s ease !important; }
 
   /* A필러 */
   #pillar-left, #pillar-right {
@@ -63,6 +64,15 @@
     font-size:0.5rem; letter-spacing:2px; color:rgba(255,179,0,0.8);
     z-index:20; pointer-events:none; white-space:nowrap;
   }
+
+  /* 깜빡임 방지 페이드 오버레이 */
+  #fade-overlay {
+    position:absolute; inset:0; z-index:7;
+    background:#0d0a05; opacity:0;
+    pointer-events:none;
+    transition: opacity 0.15s ease;
+  }
+  #fade-overlay.loading { opacity:1; }
 
   /* ── 갈림길 팝업 ── */
   #intersection-popup {
@@ -231,6 +241,7 @@
   <div id="pillar-left"></div>
   <div id="pillar-right"></div>
   <div id="roadview"></div>
+  <div id="fade-overlay"></div>
   <div id="status-bar">■ ENGINE OFF</div>
 
   <!-- 갈림길 팝업 -->
@@ -431,7 +442,7 @@ function autoAlignHeading(callback) {
 const DEFAULT_POS = { lat:37.4875, lng:126.9826 }; // 내방역 사거리 (정방향 차선)
 const MOVE_STEP   = 0.0000378;
 const TURN_STEP   = 12;
-const DRIVE_INTERVAL = 600;
+const DRIVE_INTERVAL = 900; // 깜빡임 줄이기
 const INTERSECTION_TIMEOUT = 500; // 0.5초 후 직진
 
 // ── STATE ─────────────────────────────────────────────
@@ -549,7 +560,13 @@ function moveForward(){
     // 링크의 panoId로 직접 이동 (좌표 계산 없이 실제 로드뷰 포인트로!)
     if(bestLink.panoId || bestLink.panoramaId) {
       const panoId = bestLink.panoId || bestLink.panoramaId;
-      panorama.setPanoId(panoId);
+      // 페이드 아웃 → 이동 → 페이드 인 (깜빡임 부드럽게)
+      const overlay = document.getElementById('fade-overlay');
+      overlay.classList.add('loading');
+      setTimeout(() => {
+        panorama.setPanoId(panoId);
+        setTimeout(() => overlay.classList.remove('loading'), 300);
+      }, 100);
     } else {
       // panoId 없으면 링크 방향으로 작은 좌표 이동
       const rad = heading * Math.PI / 180;
@@ -557,8 +574,6 @@ function moveForward(){
       currentPos.lng += MOVE_STEP * Math.sin(rad);
       panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
     }
-
-    panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
 
   } catch(e) {
     // 링크 정보 못 읽으면 기존 방식으로 fallback
