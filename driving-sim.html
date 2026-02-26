@@ -483,26 +483,82 @@ function stopDriving(){
 // ── MOVE ──────────────────────────────────────────────
 function moveForward(){
   if(atIntersection) return;
-  // autoAlignHeading이 올바른 heading을 잡아줌 → heading 방향으로 이동
-  const rad = heading * Math.PI / 180;
-  currentPos.lat += MOVE_STEP * Math.cos(rad);
-  currentPos.lng += MOVE_STEP * Math.sin(rad);
-  if(panorama){
-    panorama.setPosition(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    // 네이버 자동회전에 맡김 (heading+180 이동으로 자연스럽게 정방향)
+
+  try {
+    const pano = panorama.getPanorama();
+    const links = pano && pano.links ? pano.links : [];
+
+    if(links.length === 0) {
+      // 링크 없으면 도로 끝 → 정지
+      stopDriving();
+      setStatus('🛑 도로 끝');
+      return;
+    }
+
+    // 현재 heading과 가장 가까운 링크 방향으로 이동
+    let bestLink = links[0];
+    let bestDiff = 360;
+
+    links.forEach(link => {
+      const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
+      let diff = ((pan - heading) + 360) % 360;
+      if(diff > 180) diff -= 360;
+      const absDiff = Math.abs(diff);
+      if(absDiff < bestDiff) {
+        bestDiff = absDiff;
+        bestLink = link;
+      }
+    });
+
+    // 링크가 2개 이상이고 각도 차이가 크면 갈림길
+    if(links.length >= 2) {
+      // 후방 링크 제외 (180도 반대 방향)
+      const forwardLinks = links.filter(link => {
+        const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
+        let diff = ((pan - heading) + 360) % 360;
+        if(diff > 180) diff -= 360;
+        return Math.abs(diff) < 120; // 전방 120도 이내만
+      });
+
+      if(forwardLinks.length >= 2) {
+        handleIntersection(forwardLinks);
+        return;
+      }
+    }
+
+    // 다음 링크 방향으로 heading 업데이트
+    const nextPan = bestLink.angle !== undefined ? bestLink.angle : (bestLink.pan || 0);
+    heading = nextPan;
+
+    // 링크의 panoId로 직접 이동 (좌표 계산 없이 실제 로드뷰 포인트로!)
+    if(bestLink.panoId || bestLink.panoramaId) {
+      const panoId = bestLink.panoId || bestLink.panoramaId;
+      panorama.setPanoId(panoId);
+    } else {
+      // panoId 없으면 링크 방향으로 작은 좌표 이동
+      const rad = heading * Math.PI / 180;
+      currentPos.lat += MOVE_STEP * Math.cos(rad);
+      currentPos.lng += MOVE_STEP * Math.sin(rad);
+      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
+    }
+
+    panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+
+  } catch(e) {
+    // 링크 정보 못 읽으면 기존 방식으로 fallback
+    const rad = heading * Math.PI / 180;
+    currentPos.lat += MOVE_STEP * Math.cos(rad);
+    currentPos.lng += MOVE_STEP * Math.sin(rad);
+    if(panorama) {
+      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
+      panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+    }
   }
-  checkIntersection();
 }
 
-// ── 갈림길 감지 ──────────────────────────────────────
+// ── 갈림길 감지 (moveForward에서 호출) ──────────────
 function checkIntersection(){
-  if(!panorama||!engineOn) return;
-  try{
-    const pano=panorama.getPanorama();
-    if(!pano) return;
-    const links=pano.links||[];
-    if(links.length>=2) handleIntersection(links);
-  }catch(e){}
+  // moveForward 내에서 직접 처리됨
 }
 
 function handleIntersection(links){
