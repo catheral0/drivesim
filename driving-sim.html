@@ -177,6 +177,28 @@
     cursor:pointer; margin-top:4px;
   }
 
+  /* 네이버 로드뷰 기본 UI 완전 숨기기 */
+  .naver_roadview_btn_set,
+  .naver_roadview_anchor,
+  .naver_roadview_pc_hotspot,
+  .naver_roadview_hotspot,
+  .naver_location,
+  .naver_roadview_copyright,
+  .rdr_btn_set,
+  .rdr_anchor,
+  .rdr_hotspot,
+  [class*="roadview_btn"],
+  [class*="roadview_anchor"],
+  [class*="roadview_hotspot"],
+  [class*="rdr_"] {
+    display: none !important;
+    pointer-events: none !important;
+  }
+  /* 로드뷰 클릭 자체를 막아서 손가락으로 화살표 못 누르게 */
+  #roadview {
+    pointer-events: none !important;
+  }
+
   /* LOADING */
   #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
   #loading-screen h2 { font-size:0.8rem; letter-spacing:4px; color:var(--amber); }
@@ -495,36 +517,30 @@ function moveForward(){
       return;
     }
 
-    // 현재 heading과 가장 가까운 링크 방향으로 이동
-    let bestLink = links[0];
-    let bestDiff = 360;
-
-    links.forEach(link => {
+    // ★ 후방(역방향) 링크 완전 제거 - 전방 90도 이내만 허용
+    const forwardLinks = links.filter(link => {
       const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
       let diff = ((pan - heading) + 360) % 360;
       if(diff > 180) diff -= 360;
-      const absDiff = Math.abs(diff);
-      if(absDiff < bestDiff) {
-        bestDiff = absDiff;
-        bestLink = link;
-      }
+      return Math.abs(diff) <= 90; // 전방 90도 이내만
     });
 
-    // 링크가 2개 이상이고 각도 차이가 크면 갈림길
-    if(links.length >= 2) {
-      // 후방 링크 제외 (180도 반대 방향)
-      const forwardLinks = links.filter(link => {
-        const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
-        let diff = ((pan - heading) + 360) % 360;
-        if(diff > 180) diff -= 360;
-        return Math.abs(diff) < 120; // 전방 120도 이내만
-      });
-
-      if(forwardLinks.length >= 2) {
-        handleIntersection(forwardLinks);
-        return;
-      }
+    // 전방 링크가 없으면 도로 끝
+    if(forwardLinks.length === 0) {
+      stopDriving();
+      setStatus('🛑 도로 끝');
+      return;
     }
+
+    // 갈림길: 전방 링크 2개 이상
+    if(forwardLinks.length >= 2) {
+      handleIntersection(forwardLinks);
+      return;
+    }
+
+    // 전방 링크 1개 → 그 방향으로 직진
+    const bestLink = forwardLinks[0];
+    let bestDiff = 90;
 
     // 다음 링크 방향으로 heading 업데이트
     const nextPan = bestLink.angle !== undefined ? bestLink.angle : (bestLink.pan || 0);
