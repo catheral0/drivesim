@@ -18,7 +18,7 @@
   /* ── TOP CONTROLS (시동+맵 상단으로) ── */
   #top-controls {
     flex-shrink:0; background:var(--panel);
-    border-bottom:2px solid var(--amber-dim);
+    border-bottom:none;
     padding:8px 16px; display:flex;
     align-items:center; gap:10px; z-index:100;
   }
@@ -93,11 +93,12 @@
   /* ── 대시보드 ── */
   #bus-dash {
     position:absolute; bottom:0; left:0; right:0;
-    height:38%; pointer-events:none; z-index:10;
+    height:38%; pointer-events:none; z-index:10; border:none;
   }
   #dash-panel {
     position:absolute; bottom:0; left:0; right:0; height:100%;
-    background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.6) 20%,#1a1200 55%,#0f0b00 100%);
+    background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.55) 30%,#1a1200 60%,#0f0b00 100%);
+    border:none; outline:none;
   }
 
   /* 엔진 표시등 */
@@ -156,6 +157,13 @@
   .loader-bar { width:160px; height:2px; background:rgba(255,179,0,0.2); border-radius:2px; overflow:hidden; }
   .loader-fill { height:100%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:load 2.5s ease forwards; }
   @keyframes load { from{width:0} to{width:100%} }
+
+  /* 네이버 로드뷰 내부 UI 완전 제거 */
+  #roadview * { border:none !important; outline:none !important; }
+  #roadview img { border:none !important; }
+  .naver-roadview-control { display:none !important; }
+  /* 혹시 남은 가로선 전부 제거 */
+  #bus-dash, #dash-panel, #wheel-area, #top-controls { border:none !important; outline:none !important; }
 </style>
 </head>
 <body>
@@ -323,6 +331,18 @@ function initRoadview(){
     pov:{pan:heading,tilt:0,fov:100},
     logoControl:false,zoomControl:false,aroundControl:false,
   });
+  // 초기화 완료시 첫번째 링크 방향으로 heading 자동 설정
+  naver.maps.Event.addListener(panorama,'init',function(){
+    try {
+      const pano = panorama.getPanorama();
+      if(pano && pano.links && pano.links.length > 0) {
+        const firstLink = pano.links[0];
+        heading = firstLink.angle !== undefined ? firstLink.angle : (firstLink.pan || 0);
+        panorama.setPov({pan:heading, tilt:0, fov:100});
+      }
+    } catch(e) {}
+  });
+
   naver.maps.Event.addListener(panorama,'position_changed',function(){
     const pos=panorama.getPosition();
     if(pos){
@@ -371,7 +391,10 @@ function moveForward(){
   currentPos.lng+=MOVE_STEP*Math.sin(rad);
   if(panorama){
     panorama.setPosition(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    panorama.setPov({pan:heading,tilt:0,fov:100});
+    // 이동 후 카메라를 진행 방향으로 강제 고정
+    setTimeout(() => {
+      if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
+    }, 50);
   }
   checkIntersection();
 }
