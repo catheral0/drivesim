@@ -597,29 +597,38 @@ function resetWheel(){
 function openMap(){
   document.getElementById('map-modal').classList.add('show');
   if(!naverMap){
+    // 모달 완전히 열린 후 충분한 딜레이
     setTimeout(()=>{
       try{
-        naverMap=new naver.maps.Map('naver-map',{
+        const mapDiv = document.getElementById('naver-map');
+        // div 크기 강제 지정
+        mapDiv.style.width = '100%';
+        mapDiv.style.height = '100%';
+        naverMap=new naver.maps.Map(mapDiv,{
           center:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
           zoom:15,
-          scaleControl:false,
-          logoControl:false,
         });
         mapMarker=new naver.maps.Marker({
-          position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),map:naverMap,
+          position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
+          map:naverMap,
         });
         naver.maps.Event.addListener(naverMap,'click',function(e){
           mapMarker.setPosition(e.coord);
           teleportTo(e.coord.lat(),e.coord.lng());
           closeMap();
         });
+        // 생성 후 resize 강제 트리거
+        setTimeout(()=>{
+          naver.maps.Event.trigger(naverMap,'resize');
+          naverMap.setCenter(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
+        },300);
       }catch(e){ alert('지도 로딩 실패: '+e.message); }
-    },150);
+    },400);
   } else {
     setTimeout(()=>{
       naver.maps.Event.trigger(naverMap,'resize');
       naverMap.setCenter(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    },100);
+    },200);
   }
 }
 function closeMap(){ document.getElementById('map-modal').classList.remove('show'); }
