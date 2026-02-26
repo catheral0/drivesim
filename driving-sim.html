@@ -66,25 +66,6 @@
     border-top: 3px solid #3a2800;
   }
 
-  #mirror {
-    position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
-    width: 110px; height: 32px;
-    background: linear-gradient(180deg, #1a1400, #0d0a00);
-    border: 2px solid #3a2800; border-radius: 0 0 55px 55px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #mirror-text { font-size: 0.38rem; color: rgba(255,179,0,0.25); letter-spacing: 1px; }
-
-  #speedo {
-    position: absolute; left: 16px; bottom: 110px;
-    width: 75px; height: 75px; border-radius: 50%;
-    background: rgba(0,0,0,0.65); border: 1px solid var(--amber-dim);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    box-shadow: 0 0 18px rgba(255,179,0,0.12), inset 0 0 15px rgba(0,0,0,0.5);
-  }
-  #speed-val { font-size: 1.3rem; font-weight: 900; color: var(--amber); text-shadow: 0 0 10px var(--amber); line-height: 1; }
-  #speed-unit { font-size: 0.42rem; color: rgba(255,179,0,0.5); letter-spacing: 1px; }
-
   #engine-light {
     position: absolute; right: 16px; bottom: 128px;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -224,8 +205,8 @@
 <div id="header">
   <h1>🚌 BUS SIM</h1>
   <div id="location-display">
-    <div id="loc-name">동작대교 · 서울</div>
-    <div id="loc-coords" style="font-size:0.6rem;opacity:0.6;">37.5102° N, 126.9947° E</div>
+    <div id="loc-name">내방역 사거리 · 서울</div>
+    <div id="loc-coords" style="font-size:0.6rem;opacity:0.6;">37.4875° N, 126.9822° E</div>
   </div>
 </div>
 
@@ -244,11 +225,6 @@
 
   <div id="bus-dash">
     <div id="dash-panel">
-      <div id="mirror"><span id="mirror-text">REAR VIEW</span></div>
-      <div id="speedo">
-        <div id="speed-val">0</div>
-        <div id="speed-unit">KM/H</div>
-      </div>
       <div id="engine-light">
         <div id="eng-dot"></div>
         <div id="eng-label">ENG</div>
@@ -262,7 +238,7 @@
         </div>
 
         <div id="wheel-container">
-          <svg id="steering-wheel" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <svg id="steering-wheel" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" onclick="playHorn()" style="cursor:pointer;">
             <defs>
               <linearGradient id="wg" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" style="stop-color:#8a6200"/>
@@ -306,7 +282,7 @@
   <div id="loading-screen">
     <h2>🚌 BUS SIM</h2>
     <div class="loader-bar"><div class="loader-fill"></div></div>
-    <p style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:rgba(255,179,0,0.4);margin-top:8px;">동작대교 로드뷰 로딩 중...</p>
+    <p style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:rgba(255,179,0,0.4);margin-top:8px;">내방역 사거리 로딩 중...</p>
   </div>
 </div>
 
@@ -332,98 +308,77 @@
 <script>
 // ── AUDIO ─────────────────────────────────────────────
 let audioCtx = null;
-let engineOscillator = null;
-let engineLfo = null;
-let engineGain = null;
 let engineRunning = false;
 
-function initAudio() {
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
 }
 
-function makeDistortionCurve(amount) {
-  const samples = 256;
-  const curve = new Float32Array(samples);
-  for (let i = 0; i < samples; i++) {
-    const x = (i * 2) / samples - 1;
-    curve[i] = ((Math.PI + amount) * x) / (Math.PI + amount * Math.abs(x));
+function makeCurve(amount) {
+  const n = 512, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    c[i] = ((Math.PI + amount) * x) / (Math.PI + amount * Math.abs(x));
   }
-  return curve;
+  return c;
 }
 
+// 시동 B: 빠른 크랭킹 → 폭발 시동
 function playStartSound() {
-  initAudio();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  const dist = audioCtx.createWaveShaper();
-  dist.curve = makeDistortionCurve(120);
+  const ctx = getCtx();
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const dist = ctx.createWaveShaper();
+  dist.curve = makeCurve(200);
   osc.type = 'sawtooth';
-  osc.connect(dist); dist.connect(gain); gain.connect(audioCtx.destination);
-  const now = audioCtx.currentTime;
-  osc.frequency.setValueAtTime(35, now);
-  osc.frequency.linearRampToValueAtTime(100, now + 0.3);
-  osc.frequency.linearRampToValueAtTime(50, now + 0.55);
-  osc.frequency.linearRampToValueAtTime(90, now + 0.8);
-  osc.frequency.linearRampToValueAtTime(55, now + 1.1);
-  osc.frequency.linearRampToValueAtTime(70, now + 1.4);
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.4, now + 0.25);
-  gain.gain.linearRampToValueAtTime(0.28, now + 1.1);
-  gain.gain.linearRampToValueAtTime(0, now + 1.6);
-  osc.start(now); osc.stop(now + 1.6);
-  setTimeout(startEngineLoop, 1600);
-}
-
-function startEngineLoop() {
-  if (engineRunning) return;
-  engineRunning = true;
-  initAudio();
-  engineOscillator = audioCtx.createOscillator();
-  engineGain = audioCtx.createGain();
-  const dist = audioCtx.createWaveShaper();
-  const filter = audioCtx.createBiquadFilter();
-  dist.curve = makeDistortionCurve(80);
-  filter.type = 'lowpass'; filter.frequency.value = 320;
-  engineLfo = audioCtx.createOscillator();
-  const lfoGain = audioCtx.createGain();
-  engineLfo.frequency.value = 9; lfoGain.gain.value = 7;
-  engineLfo.connect(lfoGain); lfoGain.connect(engineOscillator.frequency);
-  engineOscillator.type = 'sawtooth';
-  engineOscillator.frequency.value = 65;
-  engineOscillator.connect(dist); dist.connect(filter);
-  filter.connect(engineGain); engineGain.connect(audioCtx.destination);
-  const now = audioCtx.currentTime;
-  engineGain.gain.setValueAtTime(0, now);
-  engineGain.gain.linearRampToValueAtTime(0.18, now + 0.5);
-  engineOscillator.start(); engineLfo.start();
-}
-
-function setDrivingSound(isDriving) {
-  if (!engineOscillator || !engineGain) return;
-  const now = audioCtx.currentTime;
-  if (isDriving) {
-    engineOscillator.frequency.linearRampToValueAtTime(95, now + 1.0);
-    engineGain.gain.linearRampToValueAtTime(0.22, now + 1.0);
-  } else {
-    engineOscillator.frequency.linearRampToValueAtTime(65, now + 1.0);
-    engineGain.gain.linearRampToValueAtTime(0.18, now + 1.0);
+  osc.connect(dist); dist.connect(gain); gain.connect(ctx.destination);
+  osc.frequency.setValueAtTime(20, now);
+  for (let i = 0; i < 6; i++) {
+    osc.frequency.linearRampToValueAtTime(80, now + 0.1 + i * 0.12);
+    osc.frequency.linearRampToValueAtTime(20, now + 0.2 + i * 0.12);
   }
+  osc.frequency.linearRampToValueAtTime(120, now + 1.0);
+  osc.frequency.linearRampToValueAtTime(75, now + 1.5);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.45, now + 0.1);
+  gain.gain.setValueAtTime(0.45, now + 0.85);
+  gain.gain.linearRampToValueAtTime(0.6, now + 1.0);
+  gain.gain.linearRampToValueAtTime(0.3, now + 1.8);
+  gain.gain.linearRampToValueAtTime(0, now + 2.2);
+  osc.start(now); osc.stop(now + 2.2);
 }
 
-function stopEngineSound() {
-  engineRunning = false;
-  if (engineGain) engineGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-  setTimeout(() => {
-    try { if (engineOscillator) engineOscillator.stop(); } catch(e){}
-    try { if (engineLfo) engineLfo.stop(); } catch(e){}
-    engineOscillator = null; engineLfo = null; engineGain = null;
-  }, 600);
+// 클락션 D: 에어혼 빠아아앙
+function playHorn() {
+  const ctx = getCtx();
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const osc3 = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass'; filter.frequency.value = 250; filter.Q.value = 2;
+  osc.type = 'sawtooth'; osc2.type = 'sawtooth'; osc3.type = 'square';
+  osc.frequency.value = 155; osc2.frequency.value = 195; osc3.frequency.value = 130;
+  osc.connect(filter); osc2.connect(filter); osc3.connect(filter);
+  filter.connect(gain); gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.6, now + 0.08);
+  gain.gain.setValueAtTime(0.6, now + 1.5);
+  gain.gain.linearRampToValueAtTime(0, now + 2.0);
+  osc.start(now); osc2.start(now); osc3.start(now);
+  osc.stop(now + 2.0); osc2.stop(now + 2.0); osc3.stop(now + 2.0);
 }
+
+// 주행 엔진음 없음 (제거됨)
+function setDrivingSound(isDriving) {}
+function stopEngineSound() {}
 
 // ── CONFIG ────────────────────────────────────────────
-const DEFAULT_POS = { lat: 37.5102, lng: 126.9947 }; // 동작대교
-const MOVE_STEP = 0.000027;   // 1/3로 줄임 (기존 0.00008)
+const DEFAULT_POS = { lat: 37.4875, lng: 126.9822 }; // 내방역 사거리
+const MOVE_STEP = 0.0000378; // 40% 증가   // 1/3로 줄임 (기존 0.00008)
 const TURN_STEP = 12;
 const DRIVE_INTERVAL = 600;
 
@@ -484,14 +439,14 @@ function toggleEngine() {
     btn.textContent = '시동 OFF'; btn.classList.add('running');
     dot.classList.add('on'); lb.disabled = false; rb.disabled = false;
     setStatus('▶ 주행 중');
-    document.getElementById('speed-val').textContent = 3;
+    
     playStartSound();
     startDriving();
   } else {
     btn.textContent = '시동 ON'; btn.classList.remove('running');
     dot.classList.remove('on'); lb.disabled = true; rb.disabled = true;
     setStatus('■ ENGINE OFF');
-    document.getElementById('speed-val').textContent = 0;
+    
     stopEngineSound();
     stopDriving();
     hideIntersectionPopup();
@@ -556,7 +511,7 @@ function handleIntersection(links) {
   if (atIntersection) return; // 이미 팝업 중
 
   atIntersection = true;
-  document.getElementById('speed-val').textContent = 0;
+  
   setStatus('🚦 갈림길 - 방향 선택');
 
   // 각 링크의 방향을 현재 heading 기준으로 상대 방향 계산
@@ -603,7 +558,7 @@ function chooseDirection(pan) {
   atIntersection = false;
   hideIntersectionPopup();
   setStatus('▶ 주행 중');
-  document.getElementById('speed-val').textContent = 3;
+  
 
   if (panorama) {
     panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
