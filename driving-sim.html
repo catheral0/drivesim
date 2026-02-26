@@ -331,14 +331,26 @@ function initRoadview(){
     pov:{pan:heading,tilt:0,fov:100},
     logoControl:false,zoomControl:false,aroundControl:false,
   });
-  // 초기화 완료시 첫번째 링크 방향으로 heading 자동 설정
+  // 초기화 완료시 현재 카메라 pov 방향을 heading으로 사용
   naver.maps.Event.addListener(panorama,'init',function(){
     try {
+      // 현재 로드뷰가 바라보는 방향을 그대로 heading으로 설정
+      const pov = panorama.getPov();
+      if(pov) {
+        heading = pov.pan;
+      }
+      // 링크(전진 가능 방향) 중 현재 heading과 가장 가까운 방향으로 맞춤
       const pano = panorama.getPanorama();
       if(pano && pano.links && pano.links.length > 0) {
-        const firstLink = pano.links[0];
-        heading = firstLink.angle !== undefined ? firstLink.angle : (firstLink.pan || 0);
-        panorama.setPov({pan:heading, tilt:0, fov:100});
+        let bestPan = heading, bestDiff = 360;
+        pano.links.forEach(link => {
+          const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
+          let diff = Math.abs(((pan - heading) + 360) % 360);
+          if(diff > 180) diff = 360 - diff;
+          if(diff < bestDiff) { bestDiff = diff; bestPan = pan; }
+        });
+        heading = bestPan;
+        panorama.setPov({pan: heading, tilt: 0, fov: 100});
       }
     } catch(e) {}
   });
@@ -349,6 +361,10 @@ function initRoadview(){
       currentPos.lat=pos.lat(); currentPos.lng=pos.lng();
       document.getElementById('loc-name').textContent=
         `${currentPos.lat.toFixed(4)}°N, ${currentPos.lng.toFixed(4)}°E`;
+    }
+    // 위치 변경 후 카메라 방향 강제 유지
+    if(engineOn && !atIntersection) {
+      setTimeout(()=>{ if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100}); }, 100);
     }
   });
 }
@@ -391,10 +407,13 @@ function moveForward(){
   currentPos.lng+=MOVE_STEP*Math.sin(rad);
   if(panorama){
     panorama.setPosition(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    // 이동 후 카메라를 진행 방향으로 강제 고정
+    // 이동 후 카메라를 진행 방향으로 강제 고정 (네이버 자동회전 방지)
     setTimeout(() => {
       if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
-    }, 50);
+    }, 80);
+    setTimeout(() => {
+      if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
+    }, 200);
   }
   checkIntersection();
 }
