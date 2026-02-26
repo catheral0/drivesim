@@ -98,7 +98,6 @@
   #dash-panel {
     position:absolute; bottom:0; left:0; right:0; height:100%;
     background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.6) 20%,#1a1200 55%,#0f0b00 100%);
-    border-top:3px solid #3a2800;
   }
 
   /* 엔진 표시등 */
@@ -538,7 +537,10 @@ function openMap(){
     setTimeout(()=>{
       try{
         naverMap=new naver.maps.Map('naver-map',{
-          center:new naver.maps.LatLng(currentPos.lat,currentPos.lng),zoom:15,
+          center:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
+          zoom:15,
+          scaleControl:false,
+          logoControl:false,
         });
         mapMarker=new naver.maps.Marker({
           position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),map:naverMap,
