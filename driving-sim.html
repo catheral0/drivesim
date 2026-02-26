@@ -7,222 +7,186 @@
 <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=85da2jw89d&submodules=panorama"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
+  * { margin:0; padding:0; box-sizing:border-box; }
   :root {
-    --amber: #ffb300;
-    --amber-dim: #7a5500;
-    --dark: #0d0a05;
-    --panel: rgba(20, 14, 0, 0.92);
-    --red: #ff3322;
-    --green: #00e676;
+    --amber:#ffb300; --amber-dim:#7a5500;
+    --dark:#0d0a05; --panel:rgba(20,14,0,0.92);
+    --red:#ff3322; --green:#00e676;
+  }
+  body { background:var(--dark); font-family:'Orbitron',monospace; color:var(--amber); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+
+  /* ── TOP CONTROLS (시동+맵 상단으로) ── */
+  #top-controls {
+    flex-shrink:0; background:var(--panel);
+    border-bottom:2px solid var(--amber-dim);
+    padding:8px 16px; display:flex;
+    align-items:center; gap:10px; z-index:100;
+  }
+  #header-info { flex:1; }
+  #header-info h1 { font-size:0.75rem; letter-spacing:3px; color:var(--amber); text-shadow:0 0 12px var(--amber); }
+  #loc-name { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:rgba(255,179,0,0.6); margin-top:1px; }
+  #start-btn {
+    height:44px; padding:0 16px; border-radius:10px;
+    border:2px solid var(--green); background:rgba(0,230,118,0.05);
+    color:var(--green); font-family:'Orbitron',monospace;
+    font-size:0.65rem; font-weight:700; letter-spacing:2px;
+    cursor:pointer; flex-shrink:0;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #start-btn.running { border-color:var(--red); color:var(--red); box-shadow:0 0 12px rgba(255,51,34,0.3); }
+  #map-btn {
+    height:44px; padding:0 14px; border-radius:10px;
+    border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05);
+    color:var(--amber); font-family:'Orbitron',monospace;
+    font-size:0.65rem; font-weight:700; letter-spacing:2px;
+    cursor:pointer; flex-shrink:0;
+    -webkit-tap-highlight-color:transparent;
   }
 
-  body {
-    background: var(--dark);
-    font-family: 'Orbitron', monospace;
-    color: var(--amber);
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
+  /* ── MAIN VIEW ── */
+  #main-container { flex:1; position:relative; overflow:hidden; }
+  #roadview { width:100%; height:100%; background:#1a1000; }
 
-  #header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 16px; background: var(--panel);
-    border-bottom: 2px solid var(--amber-dim); flex-shrink: 0; z-index: 100;
-  }
-  #header h1 { font-size: 0.85rem; letter-spacing: 4px; color: var(--amber); text-shadow: 0 0 15px var(--amber); }
-  #location-display { font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; color: rgba(255,179,0,0.7); text-align: right; }
-
-  #main-container { flex: 1; position: relative; overflow: hidden; }
-  #roadview { width: 100%; height: 100%; background: #1a1000; }
-
+  /* A필러 */
   #pillar-left, #pillar-right {
-    position: absolute; top: 0; bottom: 0; width: 20px; z-index: 8;
-    background: linear-gradient(90deg, #1a1200, #2a1e00);
+    position:absolute; top:0; bottom:0; width:18px; z-index:8;
+    background:linear-gradient(90deg,#1a1200,#2a1e00);
   }
-  #pillar-left { left: 0; border-right: 2px solid #3a2800; }
-  #pillar-right { right: 0; border-left: 2px solid #3a2800; }
+  #pillar-left { left:0; border-right:2px solid #3a2800; }
+  #pillar-right { right:0; border-left:2px solid #3a2800; }
 
+  /* 상태바 */
   #status-bar {
-    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.75); border: 1px solid rgba(255,179,0,0.3);
-    border-radius: 20px; padding: 4px 14px;
-    font-size: 0.55rem; letter-spacing: 2px; color: rgba(255,179,0,0.8);
-    z-index: 20; pointer-events: none; white-space: nowrap;
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.75); border:1px solid rgba(255,179,0,0.3);
+    border-radius:20px; padding:4px 14px;
+    font-size:0.5rem; letter-spacing:2px; color:rgba(255,179,0,0.8);
+    z-index:20; pointer-events:none; white-space:nowrap;
   }
 
-  /* DASHBOARD */
+  /* ── 갈림길 팝업 ── */
+  #intersection-popup {
+    display:none; position:absolute;
+    top:30%; left:50%; transform:translateX(-50%);
+    z-index:50; background:rgba(10,7,0,0.96);
+    border:2px solid var(--amber); border-radius:14px;
+    padding:16px 20px; text-align:center;
+    box-shadow:0 0 40px rgba(255,179,0,0.3);
+    pointer-events:all; min-width:220px;
+  }
+  #intersection-popup.show { display:block; }
+  #intersection-popup h3 { font-size:0.65rem; letter-spacing:3px; color:var(--amber); margin-bottom:8px; }
+  #intersection-popup p { font-family:'Share Tech Mono',monospace; font-size:0.52rem; color:rgba(255,179,0,0.5); margin-bottom:6px; }
+  #countdown-bar-wrap { height:4px; background:rgba(255,179,0,0.15); border-radius:2px; margin-bottom:12px; overflow:hidden; }
+  #countdown-bar { height:100%; background:var(--amber); border-radius:2px; width:100%; transition:width linear; }
+  #dir-buttons { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .dir-choice-btn {
+    padding:10px 14px; border-radius:10px;
+    border:1px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.06);
+    color:var(--amber); font-family:'Orbitron',monospace;
+    font-size:0.62rem; font-weight:700; letter-spacing:1px;
+    cursor:pointer; transition:all 0.15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .dir-choice-btn:active { background:rgba(255,179,0,0.2); border-color:var(--amber); box-shadow:0 0 12px rgba(255,179,0,0.3); }
+
+  /* ── 대시보드 ── */
   #bus-dash {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 48%; pointer-events: none; z-index: 10;
+    position:absolute; bottom:0; left:0; right:0;
+    height:38%; pointer-events:none; z-index:10;
   }
   #dash-panel {
-    position: absolute; bottom: 0; left: 0; right: 0; height: 100%;
-    background: linear-gradient(180deg, transparent 0%, rgba(10,7,0,0.65) 25%, #1a1200 55%, #0f0b00 100%);
-    border-top: 3px solid #3a2800;
+    position:absolute; bottom:0; left:0; right:0; height:100%;
+    background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.6) 20%,#1a1200 55%,#0f0b00 100%);
+    border-top:3px solid #3a2800;
   }
 
+  /* 엔진 표시등 */
   #engine-light {
-    position: absolute; right: 16px; bottom: 128px;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position:absolute; right:14px; bottom:90px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
   }
-  #eng-dot {
-    width: 16px; height: 16px; border-radius: 50%;
-    background: #222; border: 2px solid #444; transition: all 0.3s;
-  }
-  #eng-dot.on { background: var(--green); border-color: var(--green); box-shadow: 0 0 14px var(--green); animation: blink 2s infinite; }
+  #eng-dot { width:14px; height:14px; border-radius:50%; background:#222; border:2px solid #444; transition:all 0.3s; }
+  #eng-dot.on { background:var(--green); border-color:var(--green); box-shadow:0 0 12px var(--green); animation:blink 2s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  #eng-label { font-size: 0.42rem; color: rgba(255,179,0,0.5); letter-spacing: 1px; }
+  #eng-label { font-size:0.38rem; color:rgba(255,179,0,0.4); letter-spacing:1px; }
 
-  /* WHEEL AREA */
+  /* ── 핸들 영역 (크기 줄임) ── */
   #wheel-area {
-    position: absolute; bottom: 0; left: 0; right: 0; height: 125px;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: all;
+    position:absolute; bottom:0; left:0; right:0; height:105px;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:all;
   }
-  #left-zone { flex: 1; height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; }
-  #right-zone { flex: 1; height: 100%; display: flex; align-items: center; justify-content: flex-start; padding-left: 8px; }
-  #wheel-container { width: 150px; height: 125px; display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
+  #left-zone { flex:1; height:100%; display:flex; align-items:center; justify-content:flex-end; padding-right:10px; }
+  #right-zone { flex:1; height:100%; display:flex; align-items:center; justify-content:flex-start; padding-left:10px; }
+  #wheel-container { width:110px; height:105px; display:flex; align-items:center; justify-content:center; position:relative; flex-shrink:0; }
 
   #steering-wheel {
-    width: 138px; height: 138px;
-    position: absolute; bottom: -12px;
-    transition: transform 0.25s ease;
-    filter: drop-shadow(0 0 12px rgba(255,179,0,0.25));
+    width:105px; height:105px;
+    position:absolute; bottom:-8px;
+    transition:transform 0.25s ease;
+    filter:drop-shadow(0 0 10px rgba(255,179,0,0.2));
+    cursor:pointer;
   }
 
   .turn-btn {
-    width: 54px; height: 54px; border-radius: 50%;
-    border: 2px solid rgba(255,179,0,0.4);
-    background: rgba(255,179,0,0.05);
-    color: var(--amber); font-size: 1.2rem;
-    cursor: pointer; transition: all 0.15s;
-    display: flex; align-items: center; justify-content: center;
-    -webkit-tap-highlight-color: transparent; user-select: none;
-    pointer-events: all;
+    width:50px; height:50px; border-radius:50%;
+    border:2px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05);
+    color:var(--amber); font-size:1.1rem;
+    cursor:pointer; transition:all 0.15s;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent; user-select:none;
+    pointer-events:all;
   }
-  .turn-btn:active, .turn-btn.pressed {
-    background: rgba(255,179,0,0.15); border-color: var(--amber);
-    box-shadow: 0 0 18px rgba(255,179,0,0.4); transform: scale(0.9);
-  }
-  .turn-btn:disabled { opacity: 0.2; cursor: not-allowed; transform: none !important; }
-
-  /* INTERSECTION POPUP */
-  #intersection-popup {
-    display: none;
-    position: absolute;
-    top: 50%; left: 50%; transform: translate(-50%, -50%);
-    z-index: 50;
-    background: rgba(10,7,0,0.95);
-    border: 2px solid var(--amber);
-    border-radius: 16px;
-    padding: 18px 24px;
-    text-align: center;
-    box-shadow: 0 0 40px rgba(255,179,0,0.3);
-    pointer-events: all;
-    min-width: 240px;
-  }
-  #intersection-popup.show { display: block; }
-  #intersection-popup h3 {
-    font-size: 0.7rem; letter-spacing: 3px; color: var(--amber);
-    margin-bottom: 14px; text-shadow: 0 0 10px var(--amber);
-  }
-  #intersection-popup p {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 0.58rem; color: rgba(255,179,0,0.6);
-    margin-bottom: 16px;
-  }
-  #dir-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .dir-choice-btn {
-    padding: 10px 16px; border-radius: 10px;
-    border: 1px solid rgba(255,179,0,0.5);
-    background: rgba(255,179,0,0.06);
-    color: var(--amber); font-family: 'Orbitron', monospace;
-    font-size: 0.65rem; font-weight: 700; letter-spacing: 2px;
-    cursor: pointer; transition: all 0.2s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .dir-choice-btn:hover, .dir-choice-btn:active {
-    background: rgba(255,179,0,0.18);
-    border-color: var(--amber);
-    box-shadow: 0 0 14px rgba(255,179,0,0.3);
-  }
-
-  /* BOTTOM CONTROLS */
-  #controls {
-    flex-shrink: 0; background: var(--panel);
-    border-top: 2px solid var(--amber-dim);
-    padding: 10px 16px; display: flex;
-    align-items: center; justify-content: space-between;
-    gap: 12px; z-index: 100;
-  }
-  #start-btn {
-    flex: 1; height: 50px; border-radius: 10px;
-    border: 2px solid var(--green); background: rgba(0,230,118,0.05);
-    color: var(--green); font-family: 'Orbitron', monospace;
-    font-size: 0.7rem; font-weight: 700; letter-spacing: 3px;
-    cursor: pointer; transition: all 0.2s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #start-btn.running { border-color: var(--red); color: var(--red); box-shadow: 0 0 14px rgba(255,51,34,0.3); }
-  #map-btn {
-    height: 50px; padding: 0 16px; border-radius: 10px;
-    border: 2px solid rgba(255,179,0,0.5); background: rgba(255,179,0,0.05);
-    color: var(--amber); font-family: 'Orbitron', monospace;
-    font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
-    cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-
-  #main-container::after {
-    content: ''; position: absolute; inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
-    pointer-events: none; z-index: 5;
-  }
+  .turn-btn:active { background:rgba(255,179,0,0.15); border-color:var(--amber); box-shadow:0 0 16px rgba(255,179,0,0.4); transform:scale(0.9); }
+  .turn-btn:disabled { opacity:0.2; cursor:not-allowed; transform:none !important; }
 
   /* MAP MODAL */
-  #map-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; align-items: center; justify-content: center; }
-  #map-modal.show { display: flex; }
-  #map-panel { width: 92vw; max-width: 680px; height: 78vh; background: var(--dark); border: 2px solid var(--amber-dim); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
-  #map-header { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--amber-dim); display: flex; align-items: center; justify-content: space-between; }
-  #map-header h2 { font-size: 0.75rem; letter-spacing: 3px; color: var(--amber); }
-  #map-hint { font-size: 0.58rem; color: rgba(255,179,0,0.5); font-family: 'Share Tech Mono', monospace; margin-top: 2px; }
-  #close-map { background: none; border: 1px solid rgba(255,51,34,0.5); color: var(--red); font-size: 1rem; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; }
-  #naver-map { flex: 1; }
+  #map-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; }
+  #map-modal.show { display:flex; }
+  #map-panel { width:92vw; max-width:680px; height:78vh; background:var(--dark); border:2px solid var(--amber-dim); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  #map-header { padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--amber-dim); display:flex; align-items:center; justify-content:space-between; }
+  #map-header h2 { font-size:0.7rem; letter-spacing:3px; color:var(--amber); }
+  #map-hint { font-size:0.55rem; color:rgba(255,179,0,0.5); font-family:'Share Tech Mono',monospace; margin-top:2px; }
+  #close-map { background:none; border:1px solid rgba(255,51,34,0.5); color:var(--red); font-size:1rem; width:30px; height:30px; border-radius:6px; cursor:pointer; }
+  #naver-map { flex:1; }
 
-  #loading-screen { position: absolute; inset: 0; background: var(--dark); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; gap: 16px; }
-  #loading-screen h2 { font-size: 0.8rem; letter-spacing: 4px; color: var(--amber); }
-  .loader-bar { width: 180px; height: 2px; background: rgba(255,179,0,0.2); border-radius: 2px; overflow: hidden; }
-  .loader-fill { height: 100%; background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: load 2.5s ease forwards; }
+  /* LOADING */
+  #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
+  #loading-screen h2 { font-size:0.8rem; letter-spacing:4px; color:var(--amber); }
+  .loader-bar { width:160px; height:2px; background:rgba(255,179,0,0.2); border-radius:2px; overflow:hidden; }
+  .loader-fill { height:100%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:load 2.5s ease forwards; }
   @keyframes load { from{width:0} to{width:100%} }
 </style>
 </head>
 <body>
 
-<div id="header">
-  <h1>🚌 BUS SIM</h1>
-  <div id="location-display">
+<!-- 상단 컨트롤 (시동+맵) -->
+<div id="top-controls">
+  <div id="header-info">
+    <h1>🚌 BUS SIM</h1>
     <div id="loc-name">내방역 사거리 · 서울</div>
-    <div id="loc-coords" style="font-size:0.6rem;opacity:0.6;">37.4875° N, 126.9822° E</div>
   </div>
+  <button id="start-btn" onclick="toggleEngine()">시동 ON</button>
+  <button id="map-btn" onclick="openMap()">🗺 MAP</button>
 </div>
 
+<!-- 메인 뷰 -->
 <div id="main-container">
   <div id="pillar-left"></div>
   <div id="pillar-right"></div>
   <div id="roadview"></div>
   <div id="status-bar">■ ENGINE OFF</div>
 
-  <!-- 갈림길 선택 팝업 -->
+  <!-- 갈림길 팝업 -->
   <div id="intersection-popup">
     <h3>🚦 갈림길</h3>
-    <p>방향을 선택하세요</p>
+    <p>핸들 ◀ 좌 / ▶ 우 → 직진 자동</p>
+    <div id="countdown-bar-wrap"><div id="countdown-bar"></div></div>
     <div id="dir-buttons"></div>
   </div>
 
+  <!-- 대시보드 -->
   <div id="bus-dash">
     <div id="dash-panel">
       <div id="engine-light">
@@ -230,15 +194,16 @@
         <div id="eng-label">ENG</div>
       </div>
 
+      <!-- 핸들 + 방향버튼 -->
       <div id="wheel-area">
         <div id="left-zone">
           <button class="turn-btn" id="left-btn" disabled
-            ontouchstart="startTurn('left')" ontouchend="stopTurn()"
-            onmousedown="startTurn('left')" onmouseup="stopTurn()">◀</button>
+            ontouchstart="onLeftPress()" ontouchend="onLeftRelease()"
+            onmousedown="onLeftPress()" onmouseup="onLeftRelease()">◀</button>
         </div>
 
         <div id="wheel-container">
-          <svg id="steering-wheel" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" onclick="playHorn()" style="cursor:pointer;">
+          <svg id="steering-wheel" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" onclick="playHorn()">
             <defs>
               <linearGradient id="wg" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" style="stop-color:#8a6200"/>
@@ -272,8 +237,8 @@
 
         <div id="right-zone">
           <button class="turn-btn" id="right-btn" disabled
-            ontouchstart="startTurn('right')" ontouchend="stopTurn()"
-            onmousedown="startTurn('right')" onmouseup="stopTurn()">▶</button>
+            ontouchstart="onRightPress()" ontouchend="onRightRelease()"
+            onmousedown="onRightPress()" onmouseup="onRightRelease()">▶</button>
         </div>
       </div>
     </div>
@@ -284,11 +249,6 @@
     <div class="loader-bar"><div class="loader-fill"></div></div>
     <p style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:rgba(255,179,0,0.4);margin-top:8px;">내방역 사거리 로딩 중...</p>
   </div>
-</div>
-
-<div id="controls">
-  <button id="start-btn" onclick="toggleEngine()">시동 ON</button>
-  <button id="map-btn" onclick="openMap()">🗺 MAP</button>
 </div>
 
 <!-- MAP MODAL -->
@@ -308,368 +268,320 @@
 <script>
 // ── AUDIO ─────────────────────────────────────────────
 let audioCtx = null;
-let engineRunning = false;
-
 function getCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
 function makeCurve(amount) {
-  const n = 512, c = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i * 2) / n - 1;
-    c[i] = ((Math.PI + amount) * x) / (Math.PI + amount * Math.abs(x));
-  }
+  const n=512, c=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=(i*2)/n-1;c[i]=((Math.PI+amount)*x)/(Math.PI+amount*Math.abs(x));}
   return c;
 }
-
-// 시동 B: 빠른 크랭킹 → 폭발 시동
-function playStartSound() {
-  const ctx = getCtx();
-  const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const dist = ctx.createWaveShaper();
-  dist.curve = makeCurve(200);
-  osc.type = 'sawtooth';
-  osc.connect(dist); dist.connect(gain); gain.connect(ctx.destination);
-  osc.frequency.setValueAtTime(20, now);
-  for (let i = 0; i < 6; i++) {
-    osc.frequency.linearRampToValueAtTime(80, now + 0.1 + i * 0.12);
-    osc.frequency.linearRampToValueAtTime(20, now + 0.2 + i * 0.12);
-  }
-  osc.frequency.linearRampToValueAtTime(120, now + 1.0);
-  osc.frequency.linearRampToValueAtTime(75, now + 1.5);
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.45, now + 0.1);
-  gain.gain.setValueAtTime(0.45, now + 0.85);
-  gain.gain.linearRampToValueAtTime(0.6, now + 1.0);
-  gain.gain.linearRampToValueAtTime(0.3, now + 1.8);
-  gain.gain.linearRampToValueAtTime(0, now + 2.2);
-  osc.start(now); osc.stop(now + 2.2);
-}
-
-// 클락션 D: 에어혼 빠아아앙
+// 클락션 D: 에어혼
 function playHorn() {
-  const ctx = getCtx();
-  const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const osc2 = ctx.createOscillator();
-  const osc3 = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass'; filter.frequency.value = 250; filter.Q.value = 2;
-  osc.type = 'sawtooth'; osc2.type = 'sawtooth'; osc3.type = 'square';
-  osc.frequency.value = 155; osc2.frequency.value = 195; osc3.frequency.value = 130;
-  osc.connect(filter); osc2.connect(filter); osc3.connect(filter);
+  const ctx=getCtx(), now=ctx.currentTime;
+  const o1=ctx.createOscillator(),o2=ctx.createOscillator(),o3=ctx.createOscillator();
+  const gain=ctx.createGain(), filter=ctx.createBiquadFilter();
+  filter.type='bandpass'; filter.frequency.value=250; filter.Q.value=2;
+  o1.type='sawtooth'; o2.type='sawtooth'; o3.type='square';
+  o1.frequency.value=155; o2.frequency.value=195; o3.frequency.value=130;
+  o1.connect(filter); o2.connect(filter); o3.connect(filter);
   filter.connect(gain); gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.6, now + 0.08);
-  gain.gain.setValueAtTime(0.6, now + 1.5);
-  gain.gain.linearRampToValueAtTime(0, now + 2.0);
-  osc.start(now); osc2.start(now); osc3.start(now);
-  osc.stop(now + 2.0); osc2.stop(now + 2.0); osc3.stop(now + 2.0);
+  gain.gain.setValueAtTime(0,now);
+  gain.gain.linearRampToValueAtTime(0.6,now+0.08);
+  gain.gain.setValueAtTime(0.6,now+1.5);
+  gain.gain.linearRampToValueAtTime(0,now+2.0);
+  o1.start(now);o2.start(now);o3.start(now);
+  o1.stop(now+2.0);o2.stop(now+2.0);o3.stop(now+2.0);
 }
-
-// 주행 엔진음 없음 (제거됨)
-function setDrivingSound(isDriving) {}
-function stopEngineSound() {}
 
 // ── CONFIG ────────────────────────────────────────────
-const DEFAULT_POS = { lat: 37.4875, lng: 126.9822 }; // 내방역 사거리
-const MOVE_STEP = 0.0000378; // 40% 증가   // 1/3로 줄임 (기존 0.00008)
-const TURN_STEP = 12;
+const DEFAULT_POS = { lat:37.4875, lng:126.9822 }; // 내방역 사거리
+const MOVE_STEP   = 0.0000378;
+const TURN_STEP   = 12;
 const DRIVE_INTERVAL = 600;
+const INTERSECTION_TIMEOUT = 500; // 0.5초 후 직진
 
 // ── STATE ─────────────────────────────────────────────
-let engineOn = false;
-let driveTimer = null;
-let turnTimer = null;
-let heading = 0;
-let currentPos = { ...DEFAULT_POS };
-let panorama = null;
-let naverMap = null;
-let mapMarker = null;
-let atIntersection = false;
-let currentLinks = [];   // 현재 위치의 연결 방향들
+let engineOn=false, driveTimer=null, turnTimer=null;
+let heading=0, currentPos={...DEFAULT_POS};
+let panorama=null, naverMap=null, mapMarker=null;
+let atIntersection=false, intersectionTimer=null;
+let intersectionLinks=[];
 
 // ── INIT ──────────────────────────────────────────────
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    document.getElementById('loading-screen').style.display = 'none';
-    if (typeof naver !== 'undefined' && naver.maps) initRoadview();
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    document.getElementById('loading-screen').style.display='none';
+    if(typeof naver!=='undefined'&&naver.maps) initRoadview();
     else setStatus('⚠ API 로딩 실패');
-  }, 2700);
+  },2700);
 });
 
-function initRoadview() {
-  panorama = new naver.maps.Panorama('roadview', {
-    position: new naver.maps.LatLng(currentPos.lat, currentPos.lng),
-    pov: { pan: heading, tilt: 0, fov: 100 },
-    logoControl: false, zoomControl: false, aroundControl: false,
+function initRoadview(){
+  panorama=new naver.maps.Panorama('roadview',{
+    position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
+    pov:{pan:heading,tilt:0,fov:100},
+    logoControl:false,zoomControl:false,aroundControl:false,
   });
-
-  // 파노라마 초기화 완료 이벤트
-  naver.maps.Event.addListener(panorama, 'init', function() {
-    checkIntersection();
-  });
-
-  // 위치 변경될 때마다 갈림길 체크
-  naver.maps.Event.addListener(panorama, 'position_changed', function() {
-    const pos = panorama.getPosition();
-    if (pos) {
-      currentPos.lat = pos.lat();
-      currentPos.lng = pos.lng();
-      document.getElementById('loc-coords').textContent =
-        `${currentPos.lat.toFixed(4)}° N, ${currentPos.lng.toFixed(4)}° E`;
+  naver.maps.Event.addListener(panorama,'position_changed',function(){
+    const pos=panorama.getPosition();
+    if(pos){
+      currentPos.lat=pos.lat(); currentPos.lng=pos.lng();
+      document.getElementById('loc-name').textContent=
+        `${currentPos.lat.toFixed(4)}°N, ${currentPos.lng.toFixed(4)}°E`;
     }
   });
 }
 
 // ── ENGINE ────────────────────────────────────────────
-function toggleEngine() {
-  engineOn = !engineOn;
-  const btn = document.getElementById('start-btn');
-  const dot = document.getElementById('eng-dot');
-  const lb = document.getElementById('left-btn');
-  const rb = document.getElementById('right-btn');
-
-  if (engineOn) {
-    btn.textContent = '시동 OFF'; btn.classList.add('running');
-    dot.classList.add('on'); lb.disabled = false; rb.disabled = false;
+function toggleEngine(){
+  engineOn=!engineOn;
+  const btn=document.getElementById('start-btn');
+  const dot=document.getElementById('eng-dot');
+  const lb=document.getElementById('left-btn');
+  const rb=document.getElementById('right-btn');
+  if(engineOn){
+    btn.textContent='시동 OFF'; btn.classList.add('running');
+    dot.classList.add('on'); lb.disabled=false; rb.disabled=false;
     setStatus('▶ 주행 중');
-    
-    playStartSound();
     startDriving();
   } else {
-    btn.textContent = '시동 ON'; btn.classList.remove('running');
-    dot.classList.remove('on'); lb.disabled = true; rb.disabled = true;
+    btn.textContent='시동 ON'; btn.classList.remove('running');
+    dot.classList.remove('on'); lb.disabled=true; rb.disabled=true;
     setStatus('■ ENGINE OFF');
-    
-    stopEngineSound();
     stopDriving();
-    hideIntersectionPopup();
-    resetWheel();
+    cancelIntersection();
   }
 }
 
-function startDriving() {
-  if (driveTimer) clearInterval(driveTimer);
-  driveTimer = setInterval(moveForward, DRIVE_INTERVAL);
-  setTimeout(() => setDrivingSound(true), 1700);
+function startDriving(){
+  if(driveTimer) clearInterval(driveTimer);
+  driveTimer=setInterval(moveForward, DRIVE_INTERVAL);
 }
-
-function stopDriving() {
-  clearInterval(driveTimer);
-  driveTimer = null;
-  setDrivingSound(false);
+function stopDriving(){
+  clearInterval(driveTimer); driveTimer=null;
+  resetWheel();
 }
 
 // ── MOVE ──────────────────────────────────────────────
-function moveForward() {
-  if (atIntersection) return; // 갈림길에서 멈춤
-
-  const rad = heading * Math.PI / 180;
-  currentPos.lat += MOVE_STEP * Math.cos(rad);
-  currentPos.lng += MOVE_STEP * Math.sin(rad);
-
-  if (panorama) {
-    panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-    panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+function moveForward(){
+  if(atIntersection) return;
+  const rad=heading*Math.PI/180;
+  currentPos.lat+=MOVE_STEP*Math.cos(rad);
+  currentPos.lng+=MOVE_STEP*Math.sin(rad);
+  if(panorama){
+    panorama.setPosition(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
+    panorama.setPov({pan:heading,tilt:0,fov:100});
   }
-
-  document.getElementById('loc-coords').textContent =
-    `${currentPos.lat.toFixed(4)}° N, ${currentPos.lng.toFixed(4)}° E`;
-
-  // 갈림길 체크 (매 3스텝마다)
   checkIntersection();
 }
 
-// ── INTERSECTION DETECTION ────────────────────────────
-function checkIntersection() {
-  if (!panorama || !engineOn) return;
-
-  try {
-    // 네이버 파노라마의 주변 링크(연결 방향) 가져오기
-    const pano = panorama.getPanorama();
-    if (!pano) return;
-
-    const links = pano.links || [];
-    currentLinks = links;
-
-    // 링크가 2개 이상이면 갈림길
-    if (links.length >= 2) {
-      handleIntersection(links);
-    }
-  } catch(e) {
-    // 링크 정보 없을 때 무시
-  }
+// ── 갈림길 감지 ──────────────────────────────────────
+function checkIntersection(){
+  if(!panorama||!engineOn) return;
+  try{
+    const pano=panorama.getPanorama();
+    if(!pano) return;
+    const links=pano.links||[];
+    if(links.length>=2) handleIntersection(links);
+  }catch(e){}
 }
 
-function handleIntersection(links) {
-  if (atIntersection) return; // 이미 팝업 중
+function handleIntersection(links){
+  if(atIntersection) return;
+  atIntersection=true;
+  intersectionLinks=links;
+  setStatus('🚦 갈림길 - 핸들로 방향 선택!');
 
-  atIntersection = true;
-  
-  setStatus('🚦 갈림길 - 방향 선택');
+  const dirBtns=document.getElementById('dir-buttons');
+  dirBtns.innerHTML='';
 
-  // 각 링크의 방향을 현재 heading 기준으로 상대 방향 계산
-  const dirBtns = document.getElementById('dir-buttons');
-  dirBtns.innerHTML = '';
-
-  // 방향 이름 매핑
-  const getRelDir = (linkPan) => {
-    let diff = ((linkPan - heading) + 360) % 360;
-    if (diff > 180) diff -= 360;
-    if (diff < -60) return '← 좌회전';
-    if (diff > 60)  return '→ 우회전';
-    return '↑ 직진';
+  const getRelDir=(pan)=>{
+    let diff=((pan-heading)+360)%360;
+    if(diff>180) diff-=360;
+    if(diff<-60) return {label:'← 좌회전',type:'left'};
+    if(diff>60)  return {label:'→ 우회전',type:'right'};
+    return {label:'↑ 직진',type:'straight'};
   };
 
-  // 중복 방향 제거
-  const seen = new Set();
-  links.forEach((link) => {
-    const label = getRelDir(link.panoramaId ? (link.angle || 0) : (link.pan || 0));
-    const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
-    const key = Math.round(pan / 30); // 30도 단위로 묶어 중복 제거
-    if (seen.has(key)) return;
+  const seen=new Set();
+  links.forEach(link=>{
+    const pan=link.angle!==undefined?link.angle:(link.pan||0);
+    const key=Math.round(pan/30);
+    if(seen.has(key)) return;
     seen.add(key);
-
-    const btn = document.createElement('button');
-    btn.className = 'dir-choice-btn';
-    btn.textContent = label;
-    btn.onclick = () => chooseDirection(pan);
+    const {label}=getRelDir(pan);
+    const btn=document.createElement('button');
+    btn.className='dir-choice-btn';
+    btn.textContent=label;
+    btn.onclick=()=>chooseDirection(pan);
     dirBtns.appendChild(btn);
   });
 
-  // 버튼이 1개밖에 없으면 갈림길 아님 → 계속 주행
-  if (dirBtns.children.length <= 1) {
-    atIntersection = false;
-    hideIntersectionPopup();
+  if(dirBtns.children.length<=1){
+    atIntersection=false;
     return;
   }
 
   showIntersectionPopup();
+
+  // 0.5초 후 직진 자동 선택
+  const bar=document.getElementById('countdown-bar');
+  bar.style.transition='none'; bar.style.width='100%';
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      bar.style.transition=`width ${INTERSECTION_TIMEOUT}ms linear`;
+      bar.style.width='0%';
+    });
+  });
+
+  intersectionTimer=setTimeout(()=>{
+    if(atIntersection) goStraight();
+  }, INTERSECTION_TIMEOUT);
 }
 
-function chooseDirection(pan) {
-  heading = (pan + 360) % 360;
-  atIntersection = false;
+function goStraight(){
+  // 현재 heading과 가장 가까운 링크 선택
+  let bestPan=heading, bestDiff=360;
+  intersectionLinks.forEach(link=>{
+    const pan=link.angle!==undefined?link.angle:(link.pan||0);
+    let diff=((pan-heading)+360)%360;
+    if(diff>180) diff-=360;
+    const absDiff=Math.abs(diff);
+    if(absDiff<bestDiff){ bestDiff=absDiff; bestPan=pan; }
+  });
+  chooseDirection(bestPan);
+}
+
+function chooseDirection(pan){
+  clearTimeout(intersectionTimer);
+  heading=(pan+360)%360;
+  atIntersection=false;
   hideIntersectionPopup();
   setStatus('▶ 주행 중');
-  
+  if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100});
+  resetWheel();
+  setTimeout(()=>{ if(engineOn&&!atIntersection) moveForward(); },300);
+}
 
-  if (panorama) {
-    panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+function cancelIntersection(){
+  clearTimeout(intersectionTimer);
+  atIntersection=false;
+  hideIntersectionPopup();
+}
+
+function showIntersectionPopup(){ document.getElementById('intersection-popup').classList.add('show'); }
+function hideIntersectionPopup(){ document.getElementById('intersection-popup').classList.remove('show'); }
+
+// ── 핸들 조작 (갈림길 시 방향 선택 겸용) ─────────────
+function onLeftPress(){
+  if(!engineOn) return;
+  if(atIntersection){
+    // 갈림길: 가장 왼쪽 링크 선택
+    let bestPan=heading, bestDiff=0;
+    let found=false;
+    intersectionLinks.forEach(link=>{
+      const pan=link.angle!==undefined?link.angle:(link.pan||0);
+      let diff=((pan-heading)+360)%360;
+      if(diff>180) diff-=360;
+      if(diff<-20&&(!found||diff<bestDiff)){ bestDiff=diff; bestPan=pan; found=true; }
+    });
+    chooseDirection(found?bestPan:heading-TURN_STEP);
+    return;
   }
-  resetWheel();
-  // 약간 딜레이 후 재출발
-  setTimeout(() => {
-    if (engineOn && !atIntersection) moveForward();
-  }, 400);
+  doTurn('left');
+  turnTimer=setInterval(()=>doTurn('left'),200);
+}
+function onLeftRelease(){
+  clearInterval(turnTimer); turnTimer=null;
+  if(!atIntersection) resetWheel();
 }
 
-function showIntersectionPopup() {
-  document.getElementById('intersection-popup').classList.add('show');
+function onRightPress(){
+  if(!engineOn) return;
+  if(atIntersection){
+    // 갈림길: 가장 오른쪽 링크 선택
+    let bestPan=heading, bestDiff=0;
+    let found=false;
+    intersectionLinks.forEach(link=>{
+      const pan=link.angle!==undefined?link.angle:(link.pan||0);
+      let diff=((pan-heading)+360)%360;
+      if(diff>180) diff-=360;
+      if(diff>20&&(!found||diff>bestDiff)){ bestDiff=diff; bestPan=pan; found=true; }
+    });
+    chooseDirection(found?bestPan:heading+TURN_STEP);
+    return;
+  }
+  doTurn('right');
+  turnTimer=setInterval(()=>doTurn('right'),200);
 }
-function hideIntersectionPopup() {
-  document.getElementById('intersection-popup').classList.remove('show');
-}
-
-// ── STEERING ──────────────────────────────────────────
-function startTurn(dir) {
-  if (!engineOn) return;
-  doTurn(dir);
-  turnTimer = setInterval(() => doTurn(dir), 200);
-}
-
-function stopTurn() {
-  clearInterval(turnTimer); turnTimer = null;
-  resetWheel();
-}
-
-function doTurn(dir) {
-  heading = (heading + (dir === 'left' ? -TURN_STEP : TURN_STEP) + 360) % 360;
-  document.getElementById('steering-wheel').style.transform =
-    `rotate(${dir === 'left' ? -38 : 38}deg)`;
-  if (panorama) panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+function onRightRelease(){
+  clearInterval(turnTimer); turnTimer=null;
+  if(!atIntersection) resetWheel();
 }
 
-function resetWheel() {
-  document.getElementById('steering-wheel').style.transform = 'rotate(0deg)';
+function doTurn(dir){
+  heading=(heading+(dir==='left'?-TURN_STEP:TURN_STEP)+360)%360;
+  document.getElementById('steering-wheel').style.transform=
+    `rotate(${dir==='left'?-38:38}deg)`;
+  if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100});
+}
+function resetWheel(){
+  document.getElementById('steering-wheel').style.transform='rotate(0deg)';
 }
 
-// ── MAP (수정: 먼저 지도 초기화 후 열기) ──────────────
-function openMap() {
-  const modal = document.getElementById('map-modal');
-  modal.classList.add('show');
-
-  // 지도가 없으면 새로 생성, 있으면 resize 이벤트 발생
-  if (!naverMap) {
-    // 모달이 렌더링된 후 지도 생성 (타이밍 중요)
-    setTimeout(() => {
-      try {
-        naverMap = new naver.maps.Map('naver-map', {
-          center: new naver.maps.LatLng(currentPos.lat, currentPos.lng),
-          zoom: 15,
-          mapTypeId: naver.maps.MapTypeId.NORMAL,
+// ── MAP ───────────────────────────────────────────────
+function openMap(){
+  document.getElementById('map-modal').classList.add('show');
+  if(!naverMap){
+    setTimeout(()=>{
+      try{
+        naverMap=new naver.maps.Map('naver-map',{
+          center:new naver.maps.LatLng(currentPos.lat,currentPos.lng),zoom:15,
         });
-        mapMarker = new naver.maps.Marker({
-          position: new naver.maps.LatLng(currentPos.lat, currentPos.lng),
-          map: naverMap,
+        mapMarker=new naver.maps.Marker({
+          position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),map:naverMap,
         });
-        naver.maps.Event.addListener(naverMap, 'click', function(e) {
-          const pos = e.coord;
-          mapMarker.setPosition(pos);
-          teleportTo(pos.lat(), pos.lng());
+        naver.maps.Event.addListener(naverMap,'click',function(e){
+          mapMarker.setPosition(e.coord);
+          teleportTo(e.coord.lat(),e.coord.lng());
           closeMap();
         });
-      } catch(e) {
-        alert('지도 로딩 실패: ' + e.message);
-      }
-    }, 150);
+      }catch(e){ alert('지도 로딩 실패: '+e.message); }
+    },150);
   } else {
-    // 기존 지도 중심 이동 + 리사이즈
-    setTimeout(() => {
-      naver.maps.Event.trigger(naverMap, 'resize');
-      naverMap.setCenter(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-    }, 100);
+    setTimeout(()=>{
+      naver.maps.Event.trigger(naverMap,'resize');
+      naverMap.setCenter(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
+    },100);
+  }
+}
+function closeMap(){ document.getElementById('map-modal').classList.remove('show'); }
+
+function teleportTo(lat,lng){
+  currentPos={lat,lng}; heading=0;
+  cancelIntersection(); resetWheel();
+  document.getElementById('loc-name').textContent=`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+  if(panorama){
+    panorama.setPosition(new naver.maps.LatLng(lat,lng));
+    panorama.setPov({pan:0,tilt:0,fov:100});
   }
 }
 
-function closeMap() {
-  document.getElementById('map-modal').classList.remove('show');
-}
+function setStatus(msg){ document.getElementById('status-bar').textContent=msg; }
 
-function teleportTo(lat, lng) {
-  currentPos = { lat, lng };
-  heading = 0;
-  atIntersection = false;
-  hideIntersectionPopup();
-  resetWheel();
-  document.getElementById('loc-name').textContent = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-  document.getElementById('loc-coords').textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
-  if (panorama) {
-    panorama.setPosition(new naver.maps.LatLng(lat, lng));
-    panorama.setPov({ pan: 0, tilt: 0, fov: 100 });
-  }
-}
-
-// ── UTILS ─────────────────────────────────────────────
-function setStatus(msg) {
-  document.getElementById('status-bar').textContent = msg;
-}
-
-// ── KEYBOARD ──────────────────────────────────────────
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft') startTurn('left');
-  if (e.key === 'ArrowRight') startTurn('right');
-  if (e.key === ' ') { e.preventDefault(); toggleEngine(); }
-  if (e.key === 'm' || e.key === 'M') openMap();
+// ── 키보드 ────────────────────────────────────────────
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowLeft')  onLeftPress();
+  if(e.key==='ArrowRight') onRightPress();
+  if(e.key===' '){ e.preventDefault(); toggleEngine(); }
+  if(e.key==='m'||e.key==='M') openMap();
+  if(e.key==='h'||e.key==='H') playHorn();
 });
-document.addEventListener('keyup', (e) => {
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') stopTurn();
+document.addEventListener('keyup',(e)=>{
+  if(e.key==='ArrowLeft')  onLeftRelease();
+  if(e.key==='ArrowRight') onRightRelease();
 });
 </script>
 </body>
