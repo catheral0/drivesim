@@ -144,12 +144,38 @@
   /* MAP MODAL */
   #map-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; }
   #map-modal.show { display:flex; }
-  #map-panel { width:92vw; max-width:680px; height:78vh; background:var(--dark); border:2px solid var(--amber-dim); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
-  #map-header { padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--amber-dim); display:flex; align-items:center; justify-content:space-between; }
+  #map-panel { width:92vw; max-width:500px; max-height:85vh; background:var(--dark); border:2px solid var(--amber-dim); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  #map-header { padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--amber-dim); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
   #map-header h2 { font-size:0.7rem; letter-spacing:3px; color:var(--amber); }
   #map-hint { font-size:0.55rem; color:rgba(255,179,0,0.5); font-family:'Share Tech Mono',monospace; margin-top:2px; }
   #close-map { background:none; border:1px solid rgba(255,51,34,0.5); color:var(--red); font-size:1rem; width:30px; height:30px; border-radius:6px; cursor:pointer; }
-  #naver-map { flex:1; }
+  #map-body { padding:16px; overflow-y:auto; flex:1; }
+  .map-section-title { font-size:0.58rem; letter-spacing:2px; color:rgba(255,179,0,0.6); margin-bottom:10px; }
+  #quick-btns { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+  .quick-btn {
+    padding:10px 14px; border-radius:10px;
+    border:1px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05);
+    color:var(--amber); font-family:'Orbitron',monospace;
+    font-size:0.58rem; font-weight:700; letter-spacing:1px;
+    cursor:pointer; transition:all 0.15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .quick-btn:active { background:rgba(255,179,0,0.2); border-color:var(--amber); box-shadow:0 0 10px rgba(255,179,0,0.3); }
+  #coord-inputs { display:flex; flex-direction:column; gap:8px; }
+  #coord-inputs input {
+    background:rgba(255,179,0,0.05); border:1px solid rgba(255,179,0,0.3);
+    border-radius:8px; padding:10px 12px; color:var(--amber);
+    font-family:'Share Tech Mono',monospace; font-size:0.65rem;
+    outline:none; width:100%;
+  }
+  #coord-inputs input::placeholder { color:rgba(255,179,0,0.3); }
+  #coord-go-btn {
+    padding:12px; border-radius:8px;
+    border:2px solid var(--green); background:rgba(0,230,118,0.05);
+    color:var(--green); font-family:'Orbitron',monospace;
+    font-size:0.65rem; font-weight:700; letter-spacing:2px;
+    cursor:pointer; margin-top:4px;
+  }
 
   /* LOADING */
   #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
@@ -264,11 +290,40 @@
     <div id="map-header">
       <div>
         <h2>◈ 위치 선택</h2>
-        <div id="map-hint">지도를 클릭하면 그 위치에서 출발</div>
+        <div id="map-hint">장소명 또는 좌표를 입력하세요</div>
       </div>
       <button id="close-map" onclick="closeMap()">✕</button>
     </div>
-    <div id="naver-map"></div>
+    <div id="map-body">
+
+      <!-- 빠른 선택 -->
+      <div id="quick-locations">
+        <p class="map-section-title">📍 빠른 장소 선택</p>
+        <div id="quick-btns">
+          <button class="quick-btn" onclick="quickGo(37.4875,126.9822,'내방역 사거리')">내방역 사거리</button>
+          <button class="quick-btn" onclick="quickGo(37.5102,126.9947,'동작대교')">동작대교</button>
+          <button class="quick-btn" onclick="quickGo(37.5665,126.9780,'서울시청')">서울시청</button>
+          <button class="quick-btn" onclick="quickGo(37.5172,127.0473,'강남역')">강남역</button>
+          <button class="quick-btn" onclick="quickGo(37.5700,126.9836,'광화문')">광화문</button>
+          <button class="quick-btn" onclick="quickGo(37.5133,127.1028,'잠실역')">잠실역</button>
+          <button class="quick-btn" onclick="quickGo(37.4979,127.0276,'양재역')">양재역</button>
+          <button class="quick-btn" onclick="quickGo(37.5547,126.9707,'마포대교')">마포대교</button>
+          <button class="quick-btn" onclick="quickGo(37.6176,127.0016,'미아사거리')">미아사거리</button>
+          <button class="quick-btn" onclick="quickGo(37.5407,127.0694,'건대입구')">건대입구</button>
+        </div>
+      </div>
+
+      <!-- 직접 좌표 입력 -->
+      <div id="coord-section">
+        <p class="map-section-title">🔢 직접 좌표 입력</p>
+        <div id="coord-inputs">
+          <input type="number" id="input-lat" placeholder="위도 (예: 37.5665)" step="0.0001"/>
+          <input type="number" id="input-lng" placeholder="경도 (예: 126.9780)" step="0.0001"/>
+          <button id="coord-go-btn" onclick="goByCoord()">이동</button>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -360,7 +415,7 @@ const INTERSECTION_TIMEOUT = 500; // 0.5초 후 직진
 // ── STATE ─────────────────────────────────────────────
 let engineOn=false, driveTimer=null, turnTimer=null;
 let heading=0, currentPos={...DEFAULT_POS}; // heading 0=북쪽
-let panorama=null, naverMap=null, mapMarker=null;
+let panorama=null;
 let atIntersection=false, intersectionTimer=null;
 let intersectionLinks=[];
 
@@ -596,40 +651,23 @@ function resetWheel(){
 // ── MAP ───────────────────────────────────────────────
 function openMap(){
   document.getElementById('map-modal').classList.add('show');
-  if(!naverMap){
-    // 모달 완전히 열린 후 충분한 딜레이
-    setTimeout(()=>{
-      try{
-        const mapDiv = document.getElementById('naver-map');
-        // div 크기 강제 지정
-        mapDiv.style.width = '100%';
-        mapDiv.style.height = '100%';
-        naverMap=new naver.maps.Map(mapDiv,{
-          center:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
-          zoom:15,
-        });
-        mapMarker=new naver.maps.Marker({
-          position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
-          map:naverMap,
-        });
-        naver.maps.Event.addListener(naverMap,'click',function(e){
-          mapMarker.setPosition(e.coord);
-          teleportTo(e.coord.lat(),e.coord.lng());
-          closeMap();
-        });
-        // 생성 후 resize 강제 트리거
-        setTimeout(()=>{
-          naver.maps.Event.trigger(naverMap,'resize');
-          naverMap.setCenter(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-        },300);
-      }catch(e){ alert('지도 로딩 실패: '+e.message); }
-    },400);
-  } else {
-    setTimeout(()=>{
-      naver.maps.Event.trigger(naverMap,'resize');
-      naverMap.setCenter(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    },200);
+}
+
+function quickGo(lat, lng, name){
+  teleportTo(lat, lng);
+  document.getElementById('loc-name').textContent = name + ' · 서울';
+  closeMap();
+}
+
+function goByCoord(){
+  const lat = parseFloat(document.getElementById('input-lat').value);
+  const lng = parseFloat(document.getElementById('input-lng').value);
+  if(isNaN(lat)||isNaN(lng)||lat<33||lat>39||lng<124||lng>132){
+    alert('올바른 한국 좌표를 입력해주세요\n위도: 33~38, 경도: 124~132');
+    return;
   }
+  teleportTo(lat, lng);
+  closeMap();
 }
 function closeMap(){ document.getElementById('map-modal').classList.remove('show'); }
 
