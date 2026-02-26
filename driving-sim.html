@@ -302,8 +302,56 @@ function playHorn() {
   o1.stop(now+2.0);o2.stop(now+2.0);o3.stop(now+2.0);
 }
 
+// ── AUTO HEADING ALIGN ───────────────────────────────
+// 어느 위치든 로드뷰 링크 중 "전진 방향"을 자동 선택
+// 네이버 로드뷰 링크는 보통 [전방, 후방] 두 방향이 있음
+// 전방 = 현재 카메라 pov.pan과 가장 가까운 링크 방향
+function autoAlignHeading(callback) {
+  let attempts = 0;
+  const tryAlign = () => {
+    attempts++;
+    try {
+      const pano = panorama.getPanorama();
+      const links = pano && pano.links ? pano.links : [];
+
+      if (links.length === 0) {
+        // 아직 로드 안됨 → 재시도
+        if (attempts < 10) setTimeout(tryAlign, 300);
+        return;
+      }
+
+      // 링크가 2개면 전방/후방 → 현재 pov와 가까운 쪽이 전방
+      // 링크가 여러개면 갈림길 → 가장 직진에 가까운 방향 선택
+      const pov = panorama.getPov();
+      const currentPan = pov ? pov.pan : 0;
+
+      let bestPan = currentPan;
+      let bestDiff = 360;
+
+      links.forEach(link => {
+        const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
+        let diff = ((pan - currentPan) + 360) % 360;
+        if (diff > 180) diff -= 360;
+        const absDiff = Math.abs(diff);
+        if (absDiff < bestDiff) {
+          bestDiff = absDiff;
+          bestPan = pan;
+        }
+      });
+
+      heading = bestPan;
+      panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
+      if (callback) callback();
+
+    } catch(e) {
+      if (attempts < 10) setTimeout(tryAlign, 300);
+    }
+  };
+  setTimeout(tryAlign, 400);
+}
+
 // ── CONFIG ────────────────────────────────────────────
-const DEFAULT_POS = { lat:37.4875, lng:126.9822 }; // 내방역 사거리
+const DEFAULT_POS = { lat:37.4875, lng:126.9826 }; // 내방역 사거리 (정방향 차선)
 const MOVE_STEP   = 0.0000378;
 const TURN_STEP   = 12;
 const DRIVE_INTERVAL = 600;
@@ -311,7 +359,7 @@ const INTERSECTION_TIMEOUT = 500; // 0.5초 후 직진
 
 // ── STATE ─────────────────────────────────────────────
 let engineOn=false, driveTimer=null, turnTimer=null;
-let heading=0, currentPos={...DEFAULT_POS};
+let heading=0, currentPos={...DEFAULT_POS}; // heading 0=북쪽
 let panorama=null, naverMap=null, mapMarker=null;
 let atIntersection=false, intersectionTimer=null;
 let intersectionLinks=[];
@@ -331,28 +379,9 @@ function initRoadview(){
     pov:{pan:heading,tilt:0,fov:100},
     logoControl:false,zoomControl:false,aroundControl:false,
   });
-  // 초기화 완료시 현재 카메라 pov 방향을 heading으로 사용
+  // 초기화 완료시 도로 방향 자동 감지
   naver.maps.Event.addListener(panorama,'init',function(){
-    try {
-      // 현재 로드뷰가 바라보는 방향을 그대로 heading으로 설정
-      const pov = panorama.getPov();
-      if(pov) {
-        heading = pov.pan;
-      }
-      // 링크(전진 가능 방향) 중 현재 heading과 가장 가까운 방향으로 맞춤
-      const pano = panorama.getPanorama();
-      if(pano && pano.links && pano.links.length > 0) {
-        let bestPan = heading, bestDiff = 360;
-        pano.links.forEach(link => {
-          const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
-          let diff = Math.abs(((pan - heading) + 360) % 360);
-          if(diff > 180) diff = 360 - diff;
-          if(diff < bestDiff) { bestDiff = diff; bestPan = pan; }
-        });
-        heading = bestPan;
-        panorama.setPov({pan: heading, tilt: 0, fov: 100});
-      }
-    } catch(e) {}
+    autoAlignHeading();
   });
 
   naver.maps.Event.addListener(panorama,'position_changed',function(){
@@ -399,10 +428,8 @@ function stopDriving(){
 // ── MOVE ──────────────────────────────────────────────
 function moveForward(){
   if(atIntersection) return;
-  // 네이버는 setPosition시 카메라를 이전위치 방향으로 자동회전
-  // heading+180 방향으로 이동하면 카메라가 heading을 보게 됨
-  const moveHeading = (heading + 180) % 360;
-  const rad = moveHeading * Math.PI / 180;
+  // autoAlignHeading이 올바른 heading을 잡아줌 → heading 방향으로 이동
+  const rad = heading * Math.PI / 180;
   currentPos.lat += MOVE_STEP * Math.cos(rad);
   currentPos.lng += MOVE_STEP * Math.sin(rad);
   if(panorama){
@@ -603,7 +630,8 @@ function teleportTo(lat,lng){
   document.getElementById('loc-name').textContent=`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
   if(panorama){
     panorama.setPosition(new naver.maps.LatLng(lat,lng));
-    panorama.setPov({pan:0,tilt:0,fov:100});
+    // 새 위치에서 도로 방향 자동 감지
+    autoAlignHeading();
   }
 }
 
