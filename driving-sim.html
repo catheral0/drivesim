@@ -362,10 +362,7 @@ function initRoadview(){
       document.getElementById('loc-name').textContent=
         `${currentPos.lat.toFixed(4)}°N, ${currentPos.lng.toFixed(4)}°E`;
     }
-    // 위치 변경 후 카메라 방향 강제 유지
-    if(engineOn && !atIntersection) {
-      setTimeout(()=>{ if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100}); }, 100);
-    }
+
   });
 }
 
@@ -402,18 +399,15 @@ function stopDriving(){
 // ── MOVE ──────────────────────────────────────────────
 function moveForward(){
   if(atIntersection) return;
-  const rad=heading*Math.PI/180;
-  currentPos.lat+=MOVE_STEP*Math.cos(rad);
-  currentPos.lng+=MOVE_STEP*Math.sin(rad);
+  // 네이버는 setPosition시 카메라를 이전위치 방향으로 자동회전
+  // heading+180 방향으로 이동하면 카메라가 heading을 보게 됨
+  const moveHeading = (heading + 180) % 360;
+  const rad = moveHeading * Math.PI / 180;
+  currentPos.lat += MOVE_STEP * Math.cos(rad);
+  currentPos.lng += MOVE_STEP * Math.sin(rad);
   if(panorama){
     panorama.setPosition(new naver.maps.LatLng(currentPos.lat,currentPos.lng));
-    // 이동 후 카메라를 진행 방향으로 강제 고정 (네이버 자동회전 방지)
-    setTimeout(() => {
-      if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
-    }, 80);
-    setTimeout(() => {
-      if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
-    }, 200);
+    // 네이버 자동회전에 맡김 (heading+180 이동으로 자연스럽게 정방향)
   }
   checkIntersection();
 }
