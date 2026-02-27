@@ -4,154 +4,49 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>버스 드라이브 시뮬레이터</title>
-<script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=85da2jw89d&submodules=panorama"></script>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=839a230b408a0505b1b525bdf2b8a2c1"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
-  :root {
-    --amber:#ffb300; --amber-dim:#7a5500;
-    --dark:#0d0a05; --panel:rgba(20,14,0,0.92);
-    --red:#ff3322; --green:#00e676;
-  }
+  :root { --amber:#ffb300; --amber-dim:#7a5500; --dark:#0d0a05; --panel:rgba(20,14,0,0.92); --red:#ff3322; --green:#00e676; }
   body { background:var(--dark); font-family:'Orbitron',monospace; color:var(--amber); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
 
-  /* ── TOP CONTROLS (시동+맵 상단으로) ── */
-  #top-controls {
-    flex-shrink:0; background:var(--panel);
-    border-bottom:none;
-    padding:8px 16px; display:flex;
-    align-items:center; gap:10px; z-index:100;
-  }
+  #top-controls { flex-shrink:0; background:var(--panel); padding:8px 16px; display:flex; align-items:center; gap:10px; z-index:100; }
   #header-info { flex:1; }
   #header-info h1 { font-size:0.75rem; letter-spacing:3px; color:var(--amber); text-shadow:0 0 12px var(--amber); }
   #loc-name { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:rgba(255,179,0,0.6); margin-top:1px; }
-  #start-btn {
-    height:44px; padding:0 16px; border-radius:10px;
-    border:2px solid var(--green); background:rgba(0,230,118,0.05);
-    color:var(--green); font-family:'Orbitron',monospace;
-    font-size:0.65rem; font-weight:700; letter-spacing:2px;
-    cursor:pointer; flex-shrink:0;
-    -webkit-tap-highlight-color:transparent;
-  }
+  #start-btn { height:44px; padding:0 16px; border-radius:10px; border:2px solid var(--green); background:rgba(0,230,118,0.05); color:var(--green); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; letter-spacing:2px; cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
   #start-btn.running { border-color:var(--red); color:var(--red); box-shadow:0 0 12px rgba(255,51,34,0.3); }
-  #map-btn {
-    height:44px; padding:0 14px; border-radius:10px;
-    border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05);
-    color:var(--amber); font-family:'Orbitron',monospace;
-    font-size:0.65rem; font-weight:700; letter-spacing:2px;
-    cursor:pointer; flex-shrink:0;
-    -webkit-tap-highlight-color:transparent;
-  }
+  #map-btn { height:44px; padding:0 14px; border-radius:10px; border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05); color:var(--amber); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; letter-spacing:2px; cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
 
-  /* ── MAIN VIEW ── */
   #main-container { flex:1; position:relative; overflow:hidden; }
-  #roadview { width:100%; height:100%; background:#1a1000; }
-  #roadview canvas, #roadview img { transition: opacity 0.2s ease !important; }
+  #roadview { width:100%; height:100%; background:#1a1000; pointer-events:none; }
 
-  /* A필러 */
-  #pillar-left, #pillar-right {
-    position:absolute; top:0; bottom:0; width:18px; z-index:8;
-    background:linear-gradient(90deg,#1a1200,#2a1e00);
-  }
+  #pillar-left, #pillar-right { position:absolute; top:0; bottom:0; width:18px; z-index:8; background:linear-gradient(90deg,#1a1200,#2a1e00); }
   #pillar-left { left:0; border-right:2px solid #3a2800; }
   #pillar-right { right:0; border-left:2px solid #3a2800; }
 
-  /* 상태바 */
-  #status-bar {
-    position:absolute; top:8px; left:50%; transform:translateX(-50%);
-    background:rgba(0,0,0,0.75); border:1px solid rgba(255,179,0,0.3);
-    border-radius:20px; padding:4px 14px;
-    font-size:0.5rem; letter-spacing:2px; color:rgba(255,179,0,0.8);
-    z-index:20; pointer-events:none; white-space:nowrap;
-  }
+  #status-bar { position:absolute; top:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); border:1px solid rgba(255,179,0,0.3); border-radius:20px; padding:4px 14px; font-size:0.5rem; letter-spacing:2px; color:rgba(255,179,0,0.8); z-index:20; pointer-events:none; white-space:nowrap; }
 
-  /* 깜빡임 방지 페이드 오버레이 */
-  #fade-overlay {
-    position:absolute; inset:0; z-index:7;
-    background:#0d0a05; opacity:0;
-    pointer-events:none;
-    transition: opacity 0.15s ease;
-  }
-  #fade-overlay.loading { opacity:1; }
+  #bus-dash { position:absolute; bottom:0; left:0; right:0; height:38%; pointer-events:none; z-index:10; }
+  #dash-panel { position:absolute; bottom:0; left:0; right:0; height:100%; background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.55) 30%,#1a1200 60%,#0f0b00 100%); }
 
-  /* ── 갈림길 팝업 ── */
-  #intersection-popup {
-    display:none; position:absolute;
-    top:30%; left:50%; transform:translateX(-50%);
-    z-index:50; background:rgba(10,7,0,0.96);
-    border:2px solid var(--amber); border-radius:14px;
-    padding:16px 20px; text-align:center;
-    box-shadow:0 0 40px rgba(255,179,0,0.3);
-    pointer-events:all; min-width:220px;
-  }
-  #intersection-popup.show { display:block; }
-  #intersection-popup h3 { font-size:0.65rem; letter-spacing:3px; color:var(--amber); margin-bottom:8px; }
-  #intersection-popup p { font-family:'Share Tech Mono',monospace; font-size:0.52rem; color:rgba(255,179,0,0.5); margin-bottom:6px; }
-  #countdown-bar-wrap { height:4px; background:rgba(255,179,0,0.15); border-radius:2px; margin-bottom:12px; overflow:hidden; }
-  #countdown-bar { height:100%; background:var(--amber); border-radius:2px; width:100%; transition:width linear; }
-  #dir-buttons { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
-  .dir-choice-btn {
-    padding:10px 14px; border-radius:10px;
-    border:1px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.06);
-    color:var(--amber); font-family:'Orbitron',monospace;
-    font-size:0.62rem; font-weight:700; letter-spacing:1px;
-    cursor:pointer; transition:all 0.15s;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .dir-choice-btn:active { background:rgba(255,179,0,0.2); border-color:var(--amber); box-shadow:0 0 12px rgba(255,179,0,0.3); }
-
-  /* ── 대시보드 ── */
-  #bus-dash {
-    position:absolute; bottom:0; left:0; right:0;
-    height:38%; pointer-events:none; z-index:10; border:none;
-  }
-  #dash-panel {
-    position:absolute; bottom:0; left:0; right:0; height:100%;
-    background:linear-gradient(180deg,transparent 0%,rgba(10,7,0,0.55) 30%,#1a1200 60%,#0f0b00 100%);
-    border:none; outline:none;
-  }
-
-  /* 엔진 표시등 */
-  #engine-light {
-    position:absolute; right:14px; bottom:90px;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-  }
+  #engine-light { position:absolute; right:14px; bottom:90px; display:flex; flex-direction:column; align-items:center; gap:3px; }
   #eng-dot { width:14px; height:14px; border-radius:50%; background:#222; border:2px solid #444; transition:all 0.3s; }
   #eng-dot.on { background:var(--green); border-color:var(--green); box-shadow:0 0 12px var(--green); animation:blink 2s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
   #eng-label { font-size:0.38rem; color:rgba(255,179,0,0.4); letter-spacing:1px; }
 
-  /* ── 핸들 영역 (크기 줄임) ── */
-  #wheel-area {
-    position:absolute; bottom:0; left:0; right:0; height:105px;
-    display:flex; align-items:center; justify-content:center;
-    pointer-events:all;
-  }
+  #wheel-area { position:absolute; bottom:0; left:0; right:0; height:105px; display:flex; align-items:center; justify-content:center; pointer-events:all; }
   #left-zone { flex:1; height:100%; display:flex; align-items:center; justify-content:flex-end; padding-right:10px; }
   #right-zone { flex:1; height:100%; display:flex; align-items:center; justify-content:flex-start; padding-left:10px; }
   #wheel-container { width:110px; height:105px; display:flex; align-items:center; justify-content:center; position:relative; flex-shrink:0; }
-
-  #steering-wheel {
-    width:105px; height:105px;
-    position:absolute; bottom:-8px;
-    transition:transform 0.25s ease;
-    filter:drop-shadow(0 0 10px rgba(255,179,0,0.2));
-    cursor:pointer;
-  }
-
-  .turn-btn {
-    width:50px; height:50px; border-radius:50%;
-    border:2px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05);
-    color:var(--amber); font-size:1.1rem;
-    cursor:pointer; transition:all 0.15s;
-    display:flex; align-items:center; justify-content:center;
-    -webkit-tap-highlight-color:transparent; user-select:none;
-    pointer-events:all;
-  }
-  .turn-btn:active { background:rgba(255,179,0,0.15); border-color:var(--amber); box-shadow:0 0 16px rgba(255,179,0,0.4); transform:scale(0.9); }
+  #steering-wheel { width:105px; height:105px; position:absolute; bottom:-8px; transition:transform 0.25s ease; filter:drop-shadow(0 0 10px rgba(255,179,0,0.2)); cursor:pointer; }
+  .turn-btn { width:50px; height:50px; border-radius:50%; border:2px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05); color:var(--amber); font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; user-select:none; pointer-events:all; transition:all 0.15s; }
+  .turn-btn:active { background:rgba(255,179,0,0.15); border-color:var(--amber); transform:scale(0.9); }
   .turn-btn:disabled { opacity:0.2; cursor:not-allowed; transform:none !important; }
 
-  /* MAP MODAL */
+  /* MAP 모달 */
   #map-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; }
   #map-modal.show { display:flex; }
   #map-panel { width:92vw; max-width:500px; max-height:85vh; background:var(--dark); border:2px solid var(--amber-dim); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
@@ -162,71 +57,22 @@
   #map-body { padding:16px; overflow-y:auto; flex:1; }
   .map-section-title { font-size:0.58rem; letter-spacing:2px; color:rgba(255,179,0,0.6); margin-bottom:10px; }
   #quick-btns { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
-  .quick-btn {
-    padding:10px 14px; border-radius:10px;
-    border:1px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05);
-    color:var(--amber); font-family:'Orbitron',monospace;
-    font-size:0.58rem; font-weight:700; letter-spacing:1px;
-    cursor:pointer; transition:all 0.15s;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .quick-btn:active { background:rgba(255,179,0,0.2); border-color:var(--amber); box-shadow:0 0 10px rgba(255,179,0,0.3); }
+  .quick-btn { padding:10px 14px; border-radius:10px; border:1px solid rgba(255,179,0,0.4); background:rgba(255,179,0,0.05); color:var(--amber); font-family:'Orbitron',monospace; font-size:0.58rem; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:all 0.15s; }
+  .quick-btn:active { background:rgba(255,179,0,0.2); border-color:var(--amber); }
   #coord-inputs { display:flex; flex-direction:column; gap:8px; }
-  #coord-inputs input {
-    background:rgba(255,179,0,0.05); border:1px solid rgba(255,179,0,0.3);
-    border-radius:8px; padding:10px 12px; color:var(--amber);
-    font-family:'Share Tech Mono',monospace; font-size:0.65rem;
-    outline:none; width:100%;
-  }
+  #coord-inputs input { background:rgba(255,179,0,0.05); border:1px solid rgba(255,179,0,0.3); border-radius:8px; padding:10px 12px; color:var(--amber); font-family:'Share Tech Mono',monospace; font-size:0.65rem; outline:none; width:100%; }
   #coord-inputs input::placeholder { color:rgba(255,179,0,0.3); }
-  #coord-go-btn {
-    padding:12px; border-radius:8px;
-    border:2px solid var(--green); background:rgba(0,230,118,0.05);
-    color:var(--green); font-family:'Orbitron',monospace;
-    font-size:0.65rem; font-weight:700; letter-spacing:2px;
-    cursor:pointer; margin-top:4px;
-  }
+  #coord-go-btn { padding:12px; border-radius:8px; border:2px solid var(--green); background:rgba(0,230,118,0.05); color:var(--green); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; cursor:pointer; margin-top:4px; }
 
-  /* 네이버 로드뷰 기본 UI 완전 숨기기 */
-  .naver_roadview_btn_set,
-  .naver_roadview_anchor,
-  .naver_roadview_pc_hotspot,
-  .naver_roadview_hotspot,
-  .naver_location,
-  .naver_roadview_copyright,
-  .rdr_btn_set,
-  .rdr_anchor,
-  .rdr_hotspot,
-  [class*="roadview_btn"],
-  [class*="roadview_anchor"],
-  [class*="roadview_hotspot"],
-  [class*="rdr_"] {
-    display: none !important;
-    pointer-events: none !important;
-  }
-  /* 로드뷰 클릭 자체를 막아서 손가락으로 화살표 못 누르게 */
-  #roadview {
-    pointer-events: none !important;
-  }
-
-  /* LOADING */
   #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
   #loading-screen h2 { font-size:0.8rem; letter-spacing:4px; color:var(--amber); }
   .loader-bar { width:160px; height:2px; background:rgba(255,179,0,0.2); border-radius:2px; overflow:hidden; }
-  .loader-fill { height:100%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:load 2.5s ease forwards; }
+  .loader-fill { height:100%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:load 2s ease forwards; }
   @keyframes load { from{width:0} to{width:100%} }
-
-  /* 네이버 로드뷰 내부 UI 완전 제거 */
-  #roadview * { border:none !important; outline:none !important; }
-  #roadview img { border:none !important; }
-  .naver-roadview-control { display:none !important; }
-  /* 혹시 남은 가로선 전부 제거 */
-  #bus-dash, #dash-panel, #wheel-area, #top-controls { border:none !important; outline:none !important; }
 </style>
 </head>
 <body>
 
-<!-- 상단 컨트롤 (시동+맵) -->
 <div id="top-controls">
   <div id="header-info">
     <h1>🚌 BUS SIM</h1>
@@ -236,38 +82,24 @@
   <button id="map-btn" onclick="openMap()">🗺 MAP</button>
 </div>
 
-<!-- 메인 뷰 -->
 <div id="main-container">
   <div id="pillar-left"></div>
   <div id="pillar-right"></div>
   <div id="roadview"></div>
-  <div id="fade-overlay"></div>
   <div id="status-bar">■ ENGINE OFF</div>
 
-  <!-- 갈림길 팝업 -->
-  <div id="intersection-popup">
-    <h3>🚦 갈림길</h3>
-    <p>핸들 ◀ 좌 / ▶ 우 → 직진 자동</p>
-    <div id="countdown-bar-wrap"><div id="countdown-bar"></div></div>
-    <div id="dir-buttons"></div>
-  </div>
-
-  <!-- 대시보드 -->
   <div id="bus-dash">
     <div id="dash-panel">
       <div id="engine-light">
         <div id="eng-dot"></div>
         <div id="eng-label">ENG</div>
       </div>
-
-      <!-- 핸들 + 방향버튼 -->
       <div id="wheel-area">
         <div id="left-zone">
           <button class="turn-btn" id="left-btn" disabled
             ontouchstart="onLeftPress()" ontouchend="onLeftRelease()"
             onmousedown="onLeftPress()" onmouseup="onLeftRelease()">◀</button>
         </div>
-
         <div id="wheel-container">
           <svg id="steering-wheel" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" onclick="playHorn()">
             <defs>
@@ -284,9 +116,6 @@
             <circle cx="100" cy="100" r="88" fill="none" stroke="#2a1c00" stroke-width="20"/>
             <circle cx="100" cy="100" r="88" fill="none" stroke="url(#wg)" stroke-width="12"/>
             <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,179,0,0.15)" stroke-width="2"/>
-            <circle cx="100" cy="13" r="5" fill="#5a3c00"/>
-            <circle cx="15" cy="147" r="5" fill="#5a3c00"/>
-            <circle cx="185" cy="147" r="5" fill="#5a3c00"/>
             <path d="M100 88 L100 18" stroke="#3a2800" stroke-width="14" stroke-linecap="round"/>
             <path d="M100 88 L100 18" stroke="#6a4800" stroke-width="9" stroke-linecap="round"/>
             <path d="M100 112 L20 155" stroke="#3a2800" stroke-width="14" stroke-linecap="round"/>
@@ -295,12 +124,10 @@
             <path d="M100 112 L180 155" stroke="#6a4800" stroke-width="9" stroke-linecap="round"/>
             <circle cx="100" cy="100" r="30" fill="url(#hg)" stroke="#5a3c00" stroke-width="3"/>
             <circle cx="100" cy="100" r="22" fill="#120e00" stroke="#3a2800" stroke-width="1.5"/>
-            <circle cx="100" cy="100" r="15" fill="rgba(255,179,0,0.08)" stroke="rgba(255,179,0,0.2)" stroke-width="1"/>
             <text x="100" y="97" text-anchor="middle" fill="rgba(255,179,0,0.5)" font-size="7" font-family="Orbitron" font-weight="700">BUS</text>
             <text x="100" y="107" text-anchor="middle" fill="rgba(255,179,0,0.3)" font-size="5" font-family="Orbitron">SIM</text>
           </svg>
         </div>
-
         <div id="right-zone">
           <button class="turn-btn" id="right-btn" disabled
             ontouchstart="onRightPress()" ontouchend="onRightRelease()"
@@ -317,45 +144,38 @@
   </div>
 </div>
 
-<!-- MAP MODAL -->
+<!-- MAP 모달 -->
 <div id="map-modal">
   <div id="map-panel">
     <div id="map-header">
       <div>
         <h2>◈ 위치 선택</h2>
-        <div id="map-hint">장소명 또는 좌표를 입력하세요</div>
+        <div id="map-hint">장소를 선택하거나 좌표를 입력하세요</div>
       </div>
       <button id="close-map" onclick="closeMap()">✕</button>
     </div>
     <div id="map-body">
-
-      <!-- 빠른 선택 -->
-      <div id="quick-locations">
-        <p class="map-section-title">📍 빠른 장소 선택</p>
-        <div id="quick-btns">
-          <button class="quick-btn" onclick="quickGo(37.4875,126.9822,'내방역 사거리')">내방역 사거리</button>
-          <button class="quick-btn" onclick="quickGo(37.5102,126.9947,'동작대교')">동작대교</button>
-          <button class="quick-btn" onclick="quickGo(37.5665,126.9780,'서울시청')">서울시청</button>
-          <button class="quick-btn" onclick="quickGo(37.5172,127.0473,'강남역')">강남역</button>
-          <button class="quick-btn" onclick="quickGo(37.5700,126.9836,'광화문')">광화문</button>
-          <button class="quick-btn" onclick="quickGo(37.5133,127.1028,'잠실역')">잠실역</button>
-          <button class="quick-btn" onclick="quickGo(37.4979,127.0276,'양재역')">양재역</button>
-          <button class="quick-btn" onclick="quickGo(37.5547,126.9707,'마포대교')">마포대교</button>
-          <button class="quick-btn" onclick="quickGo(37.6176,127.0016,'미아사거리')">미아사거리</button>
-          <button class="quick-btn" onclick="quickGo(37.5407,127.0694,'건대입구')">건대입구</button>
-        </div>
+      <p class="map-section-title">📍 빠른 장소 선택</p>
+      <div id="quick-btns">
+        <button class="quick-btn" onclick="quickGo(37.4875,126.9822,'내방역 사거리')">내방역 사거리</button>
+        <button class="quick-btn" onclick="quickGo(37.5102,126.9947,'동작대교')">동작대교</button>
+        <button class="quick-btn" onclick="quickGo(37.5665,126.9780,'서울시청')">서울시청</button>
+        <button class="quick-btn" onclick="quickGo(37.5172,127.0473,'강남역')">강남역</button>
+        <button class="quick-btn" onclick="quickGo(37.5700,126.9836,'광화문')">광화문</button>
+        <button class="quick-btn" onclick="quickGo(37.5133,127.1028,'잠실역')">잠실역</button>
+        <button class="quick-btn" onclick="quickGo(37.4979,127.0276,'양재역')">양재역</button>
+        <button class="quick-btn" onclick="quickGo(37.5547,126.9707,'마포대교')">마포대교</button>
+        <button class="quick-btn" onclick="quickGo(37.6176,127.0016,'미아사거리')">미아사거리</button>
+        <button class="quick-btn" onclick="quickGo(37.5407,127.0694,'건대입구')">건대입구</button>
+        <button class="quick-btn" onclick="quickGo(37.5563,126.9223,'신촌')">신촌</button>
+        <button class="quick-btn" onclick="quickGo(37.5048,126.9548,'노량진')">노량진</button>
       </div>
-
-      <!-- 직접 좌표 입력 -->
-      <div id="coord-section">
-        <p class="map-section-title">🔢 직접 좌표 입력</p>
-        <div id="coord-inputs">
-          <input type="number" id="input-lat" placeholder="위도 (예: 37.5665)" step="0.0001"/>
-          <input type="number" id="input-lng" placeholder="경도 (예: 126.9780)" step="0.0001"/>
-          <button id="coord-go-btn" onclick="goByCoord()">이동</button>
-        </div>
+      <p class="map-section-title">🔢 직접 좌표 입력</p>
+      <div id="coord-inputs">
+        <input type="number" id="input-lat" placeholder="위도 (예: 37.5665)" step="0.0001"/>
+        <input type="number" id="input-lng" placeholder="경도 (예: 126.9780)" step="0.0001"/>
+        <button id="coord-go-btn" onclick="goByCoord()">이동</button>
       </div>
-
     </div>
   </div>
 </div>
@@ -367,15 +187,9 @@ function getCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-function makeCurve(amount) {
-  const n=512, c=new Float32Array(n);
-  for(let i=0;i<n;i++){const x=(i*2)/n-1;c[i]=((Math.PI+amount)*x)/(Math.PI+amount*Math.abs(x));}
-  return c;
-}
-// 클락션 D: 에어혼
 function playHorn() {
-  const ctx=getCtx(), now=ctx.currentTime;
-  const o1=ctx.createOscillator(),o2=ctx.createOscillator(),o3=ctx.createOscillator();
+  const ctx = getCtx(), now = ctx.currentTime;
+  const o1=ctx.createOscillator(), o2=ctx.createOscillator(), o3=ctx.createOscillator();
   const gain=ctx.createGain(), filter=ctx.createBiquadFilter();
   filter.type='bandpass'; filter.frequency.value=250; filter.Q.value=2;
   o1.type='sawtooth'; o2.type='sawtooth'; o3.type='square';
@@ -386,111 +200,74 @@ function playHorn() {
   gain.gain.linearRampToValueAtTime(0.6,now+0.08);
   gain.gain.setValueAtTime(0.6,now+1.5);
   gain.gain.linearRampToValueAtTime(0,now+2.0);
-  o1.start(now);o2.start(now);o3.start(now);
-  o1.stop(now+2.0);o2.stop(now+2.0);o3.stop(now+2.0);
-}
-
-// ── AUTO HEADING ALIGN ───────────────────────────────
-// 어느 위치든 로드뷰 링크 중 "전진 방향"을 자동 선택
-// 네이버 로드뷰 링크는 보통 [전방, 후방] 두 방향이 있음
-// 전방 = 현재 카메라 pov.pan과 가장 가까운 링크 방향
-function autoAlignHeading(callback) {
-  let attempts = 0;
-  const tryAlign = () => {
-    attempts++;
-    try {
-      const pano = panorama.getPanorama();
-      const links = pano && pano.links ? pano.links : [];
-
-      if (links.length === 0) {
-        // 아직 로드 안됨 → 재시도
-        if (attempts < 10) setTimeout(tryAlign, 300);
-        return;
-      }
-
-      // 링크가 2개면 전방/후방 → 현재 pov와 가까운 쪽이 전방
-      // 링크가 여러개면 갈림길 → 가장 직진에 가까운 방향 선택
-      const pov = panorama.getPov();
-      const currentPan = pov ? pov.pan : 0;
-
-      let bestPan = currentPan;
-      let bestDiff = 360;
-
-      links.forEach(link => {
-        const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
-        let diff = ((pan - currentPan) + 360) % 360;
-        if (diff > 180) diff -= 360;
-        const absDiff = Math.abs(diff);
-        if (absDiff < bestDiff) {
-          bestDiff = absDiff;
-          bestPan = pan;
-        }
-      });
-
-      heading = bestPan;
-      panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
-      if (callback) callback();
-
-    } catch(e) {
-      if (attempts < 10) setTimeout(tryAlign, 300);
-    }
-  };
-  setTimeout(tryAlign, 400);
+  o1.start(now); o2.start(now); o3.start(now);
+  o1.stop(now+2.0); o2.stop(now+2.0); o3.stop(now+2.0);
 }
 
 // ── CONFIG ────────────────────────────────────────────
-const DEFAULT_POS = { lat:37.4875, lng:126.9826 }; // 내방역 사거리 (정방향 차선)
-const MOVE_STEP   = 0.0000378;
-const TURN_STEP   = 12;
-const DRIVE_INTERVAL = 900; // 깜빡임 줄이기
-const INTERSECTION_TIMEOUT = 500; // 0.5초 후 직진
+const DEFAULT_POS = { lat:37.4875, lng:126.9822 };
+const TURN_STEP = 12;
+const DRIVE_INTERVAL = 800;
 
 // ── STATE ─────────────────────────────────────────────
 let engineOn=false, driveTimer=null, turnTimer=null;
-let heading=0, currentPos={...DEFAULT_POS}; // heading 0=북쪽
-let panorama=null;
-let atIntersection=false, intersectionTimer=null;
-let intersectionLinks=[];
+let heading=0, currentPos={...DEFAULT_POS};
+let roadview=null, rvClient=null;
+let currentPanoId=null;
 
 // ── INIT ──────────────────────────────────────────────
 window.addEventListener('load', ()=>{
   setTimeout(()=>{
     document.getElementById('loading-screen').style.display='none';
-    if(typeof naver!=='undefined'&&naver.maps) initRoadview();
-    else setStatus('⚠ API 로딩 실패');
-  },2700);
+    initRoadview();
+  }, 2200);
 });
 
-function initRoadview(){
-  panorama=new naver.maps.Panorama('roadview',{
-    position:new naver.maps.LatLng(currentPos.lat,currentPos.lng),
-    pov:{pan:heading,tilt:0,fov:100},
-    logoControl:false,zoomControl:false,aroundControl:false,
-  });
-  // 초기화 완료시 도로 방향 자동 감지
-  naver.maps.Event.addListener(panorama,'init',function(){
-    autoAlignHeading();
+function initRoadview() {
+  roadview = new kakao.maps.Roadview(document.getElementById('roadview'));
+  rvClient = new kakao.maps.RoadviewClient();
+
+  kakao.maps.event.addListener(roadview, 'init', function() {
+    // 초기화 후 viewpoint로 heading 동기화
+    const vp = roadview.getViewpoint();
+    heading = vp.pan || 0;
   });
 
-  naver.maps.Event.addListener(panorama,'position_changed',function(){
-    const pos=panorama.getPosition();
-    if(pos){
-      currentPos.lat=pos.lat(); currentPos.lng=pos.lng();
-      document.getElementById('loc-name').textContent=
-        `${currentPos.lat.toFixed(4)}°N, ${currentPos.lng.toFixed(4)}°E`;
+  kakao.maps.event.addListener(roadview, 'position_changed', function() {
+    const pos = roadview.getPosition();
+    if (pos) {
+      currentPos.lat = pos.getLat();
+      currentPos.lng = pos.getLng();
+      document.getElementById('loc-name').textContent =
+        currentPos.lat.toFixed(4)+'°N, '+currentPos.lng.toFixed(4)+'°E';
     }
+  });
 
+  moveTo(DEFAULT_POS.lat, DEFAULT_POS.lng);
+}
+
+// ── 좌표로 가장 가까운 로드뷰로 이동 ─────────────────
+function moveTo(lat, lng) {
+  const position = new kakao.maps.LatLng(lat, lng);
+  rvClient.getNearestPanoId(position, 50, function(panoId) {
+    if (panoId === null) {
+      setStatus('⚠ 이 위치에 로드뷰 없음');
+      return;
+    }
+    currentPanoId = panoId;
+    roadview.setPanoId(panoId, position);
+    setTimeout(()=>{ roadview.setViewpoint({pan:heading, tilt:0, zoom:0}); }, 400);
   });
 }
 
 // ── ENGINE ────────────────────────────────────────────
-function toggleEngine(){
-  engineOn=!engineOn;
+function toggleEngine() {
+  engineOn = !engineOn;
   const btn=document.getElementById('start-btn');
   const dot=document.getElementById('eng-dot');
   const lb=document.getElementById('left-btn');
   const rb=document.getElementById('right-btn');
-  if(engineOn){
+  if (engineOn) {
     btn.textContent='시동 OFF'; btn.classList.add('running');
     dot.classList.add('on'); lb.disabled=false; rb.disabled=false;
     setStatus('▶ 주행 중');
@@ -499,288 +276,107 @@ function toggleEngine(){
     btn.textContent='시동 ON'; btn.classList.remove('running');
     dot.classList.remove('on'); lb.disabled=true; rb.disabled=true;
     setStatus('■ ENGINE OFF');
-    stopDriving();
-    cancelIntersection();
+    stopDriving(); resetWheel();
   }
 }
 
-function startDriving(){
-  if(driveTimer) clearInterval(driveTimer);
-  driveTimer=setInterval(moveForward, DRIVE_INTERVAL);
+function startDriving() {
+  if (driveTimer) clearInterval(driveTimer);
+  driveTimer = setInterval(moveForward, DRIVE_INTERVAL);
 }
-function stopDriving(){
-  clearInterval(driveTimer); driveTimer=null;
-  resetWheel();
-}
+function stopDriving() { clearInterval(driveTimer); driveTimer=null; }
 
-// ── MOVE ──────────────────────────────────────────────
-function moveForward(){
-  if(atIntersection) return;
+// ── 전진 이동 ─────────────────────────────────────────
+function moveForward() {
+  // heading 방향으로 약 4m 앞 좌표 계산
+  const STEP = 0.00004;
+  const rad = heading * Math.PI / 180;
+  const nextLat = currentPos.lat + STEP * Math.cos(rad);
+  const nextLng = currentPos.lng + STEP * Math.sin(rad);
+  const position = new kakao.maps.LatLng(nextLat, nextLng);
 
-  try {
-    const pano = panorama.getPanorama();
-    const links = pano && pano.links ? pano.links : [];
-
-    if(links.length === 0) {
-      // 링크 없으면 도로 끝 → 정지
-      stopDriving();
-      setStatus('🛑 도로 끝');
+  rvClient.getNearestPanoId(position, 40, function(panoId) {
+    if (panoId === null) {
+      // 넓은 범위로 재시도
+      rvClient.getNearestPanoId(position, 100, function(panoId2) {
+        if (panoId2 === null) { stopDriving(); setStatus('🛑 도로 끝'); return; }
+        applyPanoId(panoId2, position);
+      });
       return;
     }
-
-    // ★ 후방(역방향) 링크 완전 제거 - 전방 90도 이내만 허용
-    const forwardLinks = links.filter(link => {
-      const pan = link.angle !== undefined ? link.angle : (link.pan || 0);
-      let diff = ((pan - heading) + 360) % 360;
-      if(diff > 180) diff -= 360;
-      return Math.abs(diff) <= 90; // 전방 90도 이내만
-    });
-
-    // 전방 링크가 없으면 도로 끝
-    if(forwardLinks.length === 0) {
-      stopDriving();
-      setStatus('🛑 도로 끝');
-      return;
-    }
-
-    // 갈림길: 전방 링크 2개 이상
-    if(forwardLinks.length >= 2) {
-      handleIntersection(forwardLinks);
-      return;
-    }
-
-    // 전방 링크 1개 → 그 방향으로 직진
-    const bestLink = forwardLinks[0];
-    let bestDiff = 90;
-
-    // 다음 링크 방향으로 heading 업데이트
-    const nextPan = bestLink.angle !== undefined ? bestLink.angle : (bestLink.pan || 0);
-    heading = nextPan;
-
-    // 링크의 panoId로 직접 이동 (좌표 계산 없이 실제 로드뷰 포인트로!)
-    if(bestLink.panoId || bestLink.panoramaId) {
-      const panoId = bestLink.panoId || bestLink.panoramaId;
-      // 페이드 아웃 → 이동 → 페이드 인 (깜빡임 부드럽게)
-      const overlay = document.getElementById('fade-overlay');
-      overlay.classList.add('loading');
-      setTimeout(() => {
-        panorama.setPanoId(panoId);
-        setTimeout(() => overlay.classList.remove('loading'), 300);
-      }, 100);
-    } else {
-      // panoId 없으면 링크 방향으로 작은 좌표 이동
-      const rad = heading * Math.PI / 180;
-      currentPos.lat += MOVE_STEP * Math.cos(rad);
-      currentPos.lng += MOVE_STEP * Math.sin(rad);
-      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-    }
-
-  } catch(e) {
-    // 링크 정보 못 읽으면 기존 방식으로 fallback
-    const rad = heading * Math.PI / 180;
-    currentPos.lat += MOVE_STEP * Math.cos(rad);
-    currentPos.lng += MOVE_STEP * Math.sin(rad);
-    if(panorama) {
-      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-      panorama.setPov({ pan: heading, tilt: 0, fov: 100 });
-    }
-  }
-}
-
-// ── 갈림길 감지 (moveForward에서 호출) ──────────────
-function checkIntersection(){
-  // moveForward 내에서 직접 처리됨
-}
-
-function handleIntersection(links){
-  if(atIntersection) return;
-  atIntersection=true;
-  intersectionLinks=links;
-  setStatus('🚦 갈림길 - 핸들로 방향 선택!');
-
-  const dirBtns=document.getElementById('dir-buttons');
-  dirBtns.innerHTML='';
-
-  const getRelDir=(pan)=>{
-    let diff=((pan-heading)+360)%360;
-    if(diff>180) diff-=360;
-    if(diff<-60) return {label:'← 좌회전',type:'left'};
-    if(diff>60)  return {label:'→ 우회전',type:'right'};
-    return {label:'↑ 직진',type:'straight'};
-  };
-
-  const seen=new Set();
-  links.forEach(link=>{
-    const pan=link.angle!==undefined?link.angle:(link.pan||0);
-    const key=Math.round(pan/30);
-    if(seen.has(key)) return;
-    seen.add(key);
-    const {label}=getRelDir(pan);
-    const btn=document.createElement('button');
-    btn.className='dir-choice-btn';
-    btn.textContent=label;
-    btn.onclick=()=>chooseDirection(pan);
-    dirBtns.appendChild(btn);
+    applyPanoId(panoId, position);
   });
-
-  if(dirBtns.children.length<=1){
-    atIntersection=false;
-    return;
-  }
-
-  showIntersectionPopup();
-
-  // 0.5초 후 직진 자동 선택
-  const bar=document.getElementById('countdown-bar');
-  bar.style.transition='none'; bar.style.width='100%';
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      bar.style.transition=`width ${INTERSECTION_TIMEOUT}ms linear`;
-      bar.style.width='0%';
-    });
-  });
-
-  intersectionTimer=setTimeout(()=>{
-    if(atIntersection) goStraight();
-  }, INTERSECTION_TIMEOUT);
 }
 
-function goStraight(){
-  // 현재 heading과 가장 가까운 링크 선택
-  let bestPan=heading, bestDiff=360;
-  intersectionLinks.forEach(link=>{
-    const pan=link.angle!==undefined?link.angle:(link.pan||0);
-    let diff=((pan-heading)+360)%360;
-    if(diff>180) diff-=360;
-    const absDiff=Math.abs(diff);
-    if(absDiff<bestDiff){ bestDiff=absDiff; bestPan=pan; }
-  });
-  chooseDirection(bestPan);
+function applyPanoId(panoId, position) {
+  if (panoId === currentPanoId) return; // 같은 위치면 무시
+  currentPanoId = panoId;
+  roadview.setPanoId(panoId, position);
+  // 카메라 방향 유지 (이동 후 자동으로 돌아가는 것 방지)
+  setTimeout(()=>{ roadview.setViewpoint({pan:heading, tilt:0, zoom:0}); }, 250);
 }
 
-function chooseDirection(pan){
-  clearTimeout(intersectionTimer);
-  heading=(pan+360)%360;
-  atIntersection=false;
-  hideIntersectionPopup();
-  setStatus('▶ 주행 중');
-  if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100});
-  resetWheel();
-  setTimeout(()=>{ if(engineOn&&!atIntersection) moveForward(); },300);
-}
-
-function cancelIntersection(){
-  clearTimeout(intersectionTimer);
-  atIntersection=false;
-  hideIntersectionPopup();
-}
-
-function showIntersectionPopup(){ document.getElementById('intersection-popup').classList.add('show'); }
-function hideIntersectionPopup(){ document.getElementById('intersection-popup').classList.remove('show'); }
-
-// ── 핸들 조작 (갈림길 시 방향 선택 겸용) ─────────────
-function onLeftPress(){
-  if(!engineOn) return;
-  if(atIntersection){
-    // 갈림길: 가장 왼쪽 링크 선택
-    let bestPan=heading, bestDiff=0;
-    let found=false;
-    intersectionLinks.forEach(link=>{
-      const pan=link.angle!==undefined?link.angle:(link.pan||0);
-      let diff=((pan-heading)+360)%360;
-      if(diff>180) diff-=360;
-      if(diff<-20&&(!found||diff<bestDiff)){ bestDiff=diff; bestPan=pan; found=true; }
-    });
-    chooseDirection(found?bestPan:heading-TURN_STEP);
-    return;
-  }
+// ── 핸들 조작 ─────────────────────────────────────────
+function onLeftPress() {
+  if (!engineOn) return;
   doTurn('left');
-  turnTimer=setInterval(()=>doTurn('left'),200);
+  turnTimer = setInterval(()=>doTurn('left'), 200);
 }
-function onLeftRelease(){
-  clearInterval(turnTimer); turnTimer=null;
-  if(!atIntersection) resetWheel();
-}
+function onLeftRelease() { clearInterval(turnTimer); turnTimer=null; resetWheel(); }
 
-function onRightPress(){
-  if(!engineOn) return;
-  if(atIntersection){
-    // 갈림길: 가장 오른쪽 링크 선택
-    let bestPan=heading, bestDiff=0;
-    let found=false;
-    intersectionLinks.forEach(link=>{
-      const pan=link.angle!==undefined?link.angle:(link.pan||0);
-      let diff=((pan-heading)+360)%360;
-      if(diff>180) diff-=360;
-      if(diff>20&&(!found||diff>bestDiff)){ bestDiff=diff; bestPan=pan; found=true; }
-    });
-    chooseDirection(found?bestPan:heading+TURN_STEP);
-    return;
-  }
+function onRightPress() {
+  if (!engineOn) return;
   doTurn('right');
-  turnTimer=setInterval(()=>doTurn('right'),200);
+  turnTimer = setInterval(()=>doTurn('right'), 200);
 }
-function onRightRelease(){
-  clearInterval(turnTimer); turnTimer=null;
-  if(!atIntersection) resetWheel();
-}
+function onRightRelease() { clearInterval(turnTimer); turnTimer=null; resetWheel(); }
 
-function doTurn(dir){
-  heading=(heading+(dir==='left'?-TURN_STEP:TURN_STEP)+360)%360;
-  document.getElementById('steering-wheel').style.transform=
+function doTurn(dir) {
+  heading = (heading + (dir==='left' ? -TURN_STEP : TURN_STEP) + 360) % 360;
+  document.getElementById('steering-wheel').style.transform =
     `rotate(${dir==='left'?-38:38}deg)`;
-  if(panorama) panorama.setPov({pan:heading,tilt:0,fov:100});
+  roadview.setViewpoint({pan:heading, tilt:0, zoom:0});
 }
-function resetWheel(){
+function resetWheel() {
   document.getElementById('steering-wheel').style.transform='rotate(0deg)';
 }
 
 // ── MAP ───────────────────────────────────────────────
-function openMap(){
-  document.getElementById('map-modal').classList.add('show');
-}
+function openMap() { document.getElementById('map-modal').classList.add('show'); }
+function closeMap() { document.getElementById('map-modal').classList.remove('show'); }
 
-function quickGo(lat, lng, name){
-  teleportTo(lat, lng);
-  document.getElementById('loc-name').textContent = name + ' · 서울';
+function quickGo(lat, lng, name) {
+  currentPos={lat,lng}; heading=0;
+  document.getElementById('loc-name').textContent=name+' · 서울';
   closeMap();
+  moveTo(lat, lng);
 }
 
-function goByCoord(){
-  const lat = parseFloat(document.getElementById('input-lat').value);
-  const lng = parseFloat(document.getElementById('input-lng').value);
-  if(isNaN(lat)||isNaN(lng)||lat<33||lat>39||lng<124||lng>132){
-    alert('올바른 한국 좌표를 입력해주세요\n위도: 33~38, 경도: 124~132');
+function goByCoord() {
+  const lat=parseFloat(document.getElementById('input-lat').value);
+  const lng=parseFloat(document.getElementById('input-lng').value);
+  if (isNaN(lat)||isNaN(lng)||lat<33||lat>39||lng<124||lng>132) {
+    alert('올바른 한국 좌표를 입력해주세요');
     return;
   }
-  teleportTo(lat, lng);
-  closeMap();
-}
-function closeMap(){ document.getElementById('map-modal').classList.remove('show'); }
-
-function teleportTo(lat,lng){
   currentPos={lat,lng}; heading=0;
-  cancelIntersection(); resetWheel();
-  document.getElementById('loc-name').textContent=`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-  if(panorama){
-    panorama.setPosition(new naver.maps.LatLng(lat,lng));
-    // 새 위치에서 도로 방향 자동 감지
-    autoAlignHeading();
-  }
+  document.getElementById('loc-name').textContent=lat.toFixed(4)+'°N, '+lng.toFixed(4)+'°E';
+  closeMap();
+  moveTo(lat, lng);
 }
 
-function setStatus(msg){ document.getElementById('status-bar').textContent=msg; }
+function setStatus(msg) { document.getElementById('status-bar').textContent=msg; }
 
 // ── 키보드 ────────────────────────────────────────────
 document.addEventListener('keydown',(e)=>{
-  if(e.key==='ArrowLeft')  onLeftPress();
+  if(e.key==='ArrowLeft') onLeftPress();
   if(e.key==='ArrowRight') onRightPress();
   if(e.key===' '){ e.preventDefault(); toggleEngine(); }
   if(e.key==='m'||e.key==='M') openMap();
   if(e.key==='h'||e.key==='H') playHorn();
 });
 document.addEventListener('keyup',(e)=>{
-  if(e.key==='ArrowLeft')  onLeftRelease();
+  if(e.key==='ArrowLeft') onLeftRelease();
   if(e.key==='ArrowRight') onRightRelease();
 });
 </script>
