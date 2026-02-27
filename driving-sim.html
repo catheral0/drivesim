@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>버스 드라이브 시뮬레이터</title>
-<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=29c51fcad77ece70a722d4bb8955b70f&libraries=services&autoload=false"></script>
+<script>/* 카카오 SDK 동적 로드 */</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -217,12 +217,21 @@ let currentPanoId=null;
 
 // ── INIT ──────────────────────────────────────────────
 window.addEventListener('load', ()=>{
-  kakao.maps.load(function() {
-    setTimeout(()=>{
-      document.getElementById('loading-screen').style.display='none';
-      initRoadview();
-    }, 500);
-  });
+  // 카카오 SDK를 동적으로 로드
+  const script = document.createElement('script');
+  script.src = '//dapi.kakao.com/v2/maps/sdk.js?appkey=29c51fcad77ece70a722d4bb8955b70f&libraries=services&autoload=false';
+  script.onload = function() {
+    kakao.maps.load(function() {
+      setTimeout(()=>{
+        document.getElementById('loading-screen').style.display='none';
+        initRoadview();
+      }, 300);
+    });
+  };
+  script.onerror = function() {
+    document.getElementById('loading-screen').innerHTML = '<h2 style="color:#ff3322">❌ 카카오 API 로드 실패</h2><p style="color:#ffb300;font-size:0.6rem;margin-top:10px;">네트워크 연결을 확인해주세요</p>';
+  };
+  document.head.appendChild(script);
 });
 
 function initRoadview() {
