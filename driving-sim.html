@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>버스 드라이브 시뮬레이터</title>
-<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=839a230b408a0505b1b525bdf2b8a2c1&libraries=services"></script>
+<script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=85da2jw89d&submodules=panorama"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -20,7 +20,13 @@
   #map-btn { height:44px; padding:0 14px; border-radius:10px; border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05); color:var(--amber); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; letter-spacing:2px; cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
 
   #main-container { flex:1; position:relative; overflow:hidden; }
-  #roadview { width:100%; height:100%; background:#1a1000; }
+  #roadview { width:100%; height:100%; background:#1a1000; pointer-events:none; }
+  /* 네이버 로드뷰 기본 UI 완전 숨김 */
+  #roadview * { pointer-events:none !important; }
+  .naver_roadview_btn_set, .naver_roadview_anchor, .naver_roadview_hotspot,
+  .rdr_btn_set, .rdr_anchor, .rdr_hotspot,
+  [class*="roadview_btn"], [class*="roadview_anchor"], [class*="roadview_hotspot"],
+  [class*="rdr_"] { display:none !important; }
 
   #pillar-left, #pillar-right { position:absolute; top:0; bottom:0; width:18px; z-index:8; background:linear-gradient(90deg,#1a1200,#2a1e00); }
   #pillar-left { left:0; border-right:2px solid #3a2800; }
@@ -182,103 +188,101 @@
 
 <script>
 // ── AUDIO ─────────────────────────────────────────────
-let audioCtx = null;
-function getCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-function playHorn() {
-  const ctx = getCtx(), now = ctx.currentTime;
-  const o1=ctx.createOscillator(), o2=ctx.createOscillator(), o3=ctx.createOscillator();
-  const gain=ctx.createGain(), filter=ctx.createBiquadFilter();
+let audioCtx=null;
+function getCtx(){ if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+function playHorn(){
+  const ctx=getCtx(),now=ctx.currentTime;
+  const o1=ctx.createOscillator(),o2=ctx.createOscillator(),o3=ctx.createOscillator();
+  const gain=ctx.createGain(),filter=ctx.createBiquadFilter();
   filter.type='bandpass'; filter.frequency.value=250; filter.Q.value=2;
   o1.type='sawtooth'; o2.type='sawtooth'; o3.type='square';
   o1.frequency.value=155; o2.frequency.value=195; o3.frequency.value=130;
-  o1.connect(filter); o2.connect(filter); o3.connect(filter);
+  [o1,o2,o3].forEach(o=>{ o.connect(filter); });
   filter.connect(gain); gain.connect(ctx.destination);
   gain.gain.setValueAtTime(0,now);
   gain.gain.linearRampToValueAtTime(0.6,now+0.08);
   gain.gain.setValueAtTime(0.6,now+1.5);
   gain.gain.linearRampToValueAtTime(0,now+2.0);
-  o1.start(now); o2.start(now); o3.start(now);
-  o1.stop(now+2.0); o2.stop(now+2.0); o3.stop(now+2.0);
+  [o1,o2,o3].forEach(o=>{ o.start(now); o.stop(now+2.0); });
 }
 
 // ── CONFIG ────────────────────────────────────────────
-const DEFAULT_POS = { lat:37.4875, lng:126.9822 };
+const DEFAULT_POS = {lat:37.4875, lng:126.9822};
 const TURN_STEP = 12;
-const DRIVE_INTERVAL = 800;
+const DRIVE_INTERVAL = 900;
 
 // ── STATE ─────────────────────────────────────────────
 let engineOn=false, driveTimer=null, turnTimer=null;
 let heading=0, currentPos={...DEFAULT_POS};
-let roadview=null, rvClient=null;
-let currentPanoId=null;
+let panorama=null;
 
 // ── INIT ──────────────────────────────────────────────
-// 카카오 SDK 로드 완료 후 자동 실행됨 (autoload=false 제거)
 window.addEventListener('load', ()=>{
-  let tries = 0;
-  const waitKakao = setInterval(()=>{
-    tries++;
-    if (typeof kakao !== 'undefined' && kakao.maps) {
-      clearInterval(waitKakao);
-      document.getElementById('loading-screen').style.display='none';
-      initRoadview();
-    }
-    if (tries > 30) {
-      clearInterval(waitKakao);
-      document.getElementById('loading-screen').innerHTML =
-        '<h2 style="color:#ff3322;font-size:0.7rem;">❌ 카카오 API 로드 실패</h2><p style="color:#ffb300;font-size:0.55rem;margin-top:10px;font-family:monospace;">네트워크 또는 API 키 문제</p>';
-    }
-  }, 300);
+  setTimeout(()=>{
+    document.getElementById('loading-screen').style.display='none';
+    initPanorama();
+  }, 2000);
 });
 
-function initRoadview() {
-  roadview = new kakao.maps.Roadview(document.getElementById('roadview'));
-  rvClient = new kakao.maps.RoadviewClient();
-
-  kakao.maps.event.addListener(roadview, 'init', function() {
-    // 초기화 후 viewpoint로 heading 동기화
-    const vp = roadview.getViewpoint();
-    heading = vp.pan || 0;
+function initPanorama(){
+  panorama = new naver.maps.Panorama('roadview', {
+    position: new naver.maps.LatLng(DEFAULT_POS.lat, DEFAULT_POS.lng),
+    pov: {pan:0, tilt:0, fov:100},
+    flightSpot: false,
+    logoControl: false,
+    zoomControl: false,
   });
 
-  kakao.maps.event.addListener(roadview, 'position_changed', function() {
-    const pos = roadview.getPosition();
-    if (pos) {
-      currentPos.lat = pos.getLat();
-      currentPos.lng = pos.getLng();
+  naver.maps.Event.addListener(panorama, 'init', function(){
+    autoAlignHeading();
+  });
+
+  naver.maps.Event.addListener(panorama, 'position_changed', function(){
+    const pos = panorama.getPosition();
+    if(pos){
+      currentPos.lat = pos.lat();
+      currentPos.lng = pos.lng();
       document.getElementById('loc-name').textContent =
         currentPos.lat.toFixed(4)+'°N, '+currentPos.lng.toFixed(4)+'°E';
     }
   });
-
-  moveTo(DEFAULT_POS.lat, DEFAULT_POS.lng);
 }
 
-// ── 좌표로 가장 가까운 로드뷰로 이동 ─────────────────
-function moveTo(lat, lng) {
-  const position = new kakao.maps.LatLng(lat, lng);
-  rvClient.getNearestPanoId(position, 50, function(panoId) {
-    if (panoId === null) {
-      setStatus('⚠ 이 위치에 로드뷰 없음');
+// ── 자동 방향 정렬 ────────────────────────────────────
+function autoAlignHeading(retries=0){
+  try {
+    const pano = panorama.getPanorama();
+    const links = pano && pano.links ? pano.links : [];
+    if(links.length === 0){
+      if(retries < 10){ setTimeout(()=>autoAlignHeading(retries+1), 300); }
       return;
     }
-    currentPanoId = panoId;
-    roadview.setPanoId(panoId, position);
-    setTimeout(()=>{ roadview.setViewpoint({pan:heading, tilt:0, zoom:0}); }, 400);
-  });
+    // 현재 pan과 가장 가까운 전방 링크 방향으로 heading 설정
+    const currentPan = panorama.getPov().pan;
+    let best = links[0];
+    let bestDiff = 360;
+    links.forEach(link=>{
+      const pan = link.angle !== undefined ? link.angle : (link.pan||0);
+      let diff = ((pan - currentPan)+360)%360;
+      if(diff>180) diff-=360;
+      if(Math.abs(diff)<bestDiff){ bestDiff=Math.abs(diff); best=link; }
+    });
+    const bestPan = best.angle !== undefined ? best.angle : (best.pan||0);
+    heading = bestPan;
+    panorama.setPov({pan:heading, tilt:0, fov:100});
+  } catch(e){
+    if(retries<10) setTimeout(()=>autoAlignHeading(retries+1), 300);
+  }
 }
 
 // ── ENGINE ────────────────────────────────────────────
-function toggleEngine() {
+function toggleEngine(){
   engineOn = !engineOn;
   const btn=document.getElementById('start-btn');
   const dot=document.getElementById('eng-dot');
   const lb=document.getElementById('left-btn');
   const rb=document.getElementById('right-btn');
-  if (engineOn) {
+  if(engineOn){
     btn.textContent='시동 OFF'; btn.classList.add('running');
     dot.classList.add('on'); lb.disabled=false; rb.disabled=false;
     setStatus('▶ 주행 중');
@@ -290,93 +294,105 @@ function toggleEngine() {
     stopDriving(); resetWheel();
   }
 }
+function startDriving(){ if(driveTimer) clearInterval(driveTimer); driveTimer=setInterval(moveForward, DRIVE_INTERVAL); }
+function stopDriving(){ clearInterval(driveTimer); driveTimer=null; }
 
-function startDriving() {
-  if (driveTimer) clearInterval(driveTimer);
-  driveTimer = setInterval(moveForward, DRIVE_INTERVAL);
-}
-function stopDriving() { clearInterval(driveTimer); driveTimer=null; }
+// ── 전진 이동 (링크 기반) ─────────────────────────────
+function moveForward(){
+  try {
+    const pano = panorama.getPanorama();
+    const links = pano && pano.links ? pano.links : [];
 
-// ── 전진 이동 ─────────────────────────────────────────
-function moveForward() {
-  // heading 방향으로 약 4m 앞 좌표 계산
-  const STEP = 0.00004;
-  const rad = heading * Math.PI / 180;
-  const nextLat = currentPos.lat + STEP * Math.cos(rad);
-  const nextLng = currentPos.lng + STEP * Math.sin(rad);
-  const position = new kakao.maps.LatLng(nextLat, nextLng);
+    // 전방 90도 이내 링크만 필터
+    const forwardLinks = links.filter(link=>{
+      const pan = link.angle !== undefined ? link.angle : (link.pan||0);
+      let diff = ((pan - heading)+360)%360;
+      if(diff>180) diff-=360;
+      return Math.abs(diff) <= 90;
+    });
 
-  rvClient.getNearestPanoId(position, 40, function(panoId) {
-    if (panoId === null) {
-      // 넓은 범위로 재시도
-      rvClient.getNearestPanoId(position, 100, function(panoId2) {
-        if (panoId2 === null) { stopDriving(); setStatus('🛑 도로 끝'); return; }
-        applyPanoId(panoId2, position);
-      });
-      return;
+    if(forwardLinks.length === 0){
+      stopDriving(); setStatus('🛑 도로 끝'); return;
     }
-    applyPanoId(panoId, position);
-  });
-}
 
-function applyPanoId(panoId, position) {
-  if (panoId === currentPanoId) return; // 같은 위치면 무시
-  currentPanoId = panoId;
-  roadview.setPanoId(panoId, position);
-  // 카메라 방향 유지 (이동 후 자동으로 돌아가는 것 방지)
-  setTimeout(()=>{ roadview.setViewpoint({pan:heading, tilt:0, zoom:0}); }, 250);
+    // 가장 heading에 가까운 링크 선택
+    let best = forwardLinks[0], bestDiff=360;
+    forwardLinks.forEach(link=>{
+      const pan = link.angle !== undefined ? link.angle : (link.pan||0);
+      let diff = ((pan-heading)+360)%360;
+      if(diff>180) diff-=360;
+      if(Math.abs(diff)<bestDiff){ bestDiff=Math.abs(diff); best=link; }
+    });
+
+    const bestPan = best.angle !== undefined ? best.angle : (best.pan||0);
+    heading = bestPan;
+
+    // panoId로 직접 이동
+    const panoId = best.panoId || best.panoramaId;
+    if(panoId){
+      panorama.setPanoId(panoId);
+      setTimeout(()=>{ panorama.setPov({pan:heading, tilt:0, fov:100}); }, 250);
+    } else {
+      // fallback: 좌표 이동
+      const rad = heading * Math.PI / 180;
+      currentPos.lat += 0.00004 * Math.cos(rad);
+      currentPos.lng += 0.00004 * Math.sin(rad);
+      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
+      setTimeout(()=>{ panorama.setPov({pan:heading, tilt:0, fov:100}); }, 250);
+    }
+  } catch(e){
+    // fallback
+    const rad = heading * Math.PI / 180;
+    currentPos.lat += 0.00004 * Math.cos(rad);
+    currentPos.lng += 0.00004 * Math.sin(rad);
+    if(panorama) panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
+  }
 }
 
 // ── 핸들 조작 ─────────────────────────────────────────
-function onLeftPress() {
-  if (!engineOn) return;
-  doTurn('left');
-  turnTimer = setInterval(()=>doTurn('left'), 200);
-}
-function onLeftRelease() { clearInterval(turnTimer); turnTimer=null; resetWheel(); }
+function onLeftPress(){ if(!engineOn) return; doTurn('left'); turnTimer=setInterval(()=>doTurn('left'),200); }
+function onLeftRelease(){ clearInterval(turnTimer); turnTimer=null; resetWheel(); }
+function onRightPress(){ if(!engineOn) return; doTurn('right'); turnTimer=setInterval(()=>doTurn('right'),200); }
+function onRightRelease(){ clearInterval(turnTimer); turnTimer=null; resetWheel(); }
 
-function onRightPress() {
-  if (!engineOn) return;
-  doTurn('right');
-  turnTimer = setInterval(()=>doTurn('right'), 200);
+function doTurn(dir){
+  heading = (heading+(dir==='left'?-TURN_STEP:TURN_STEP)+360)%360;
+  document.getElementById('steering-wheel').style.transform=`rotate(${dir==='left'?-38:38}deg)`;
+  if(panorama) panorama.setPov({pan:heading, tilt:0, fov:100});
 }
-function onRightRelease() { clearInterval(turnTimer); turnTimer=null; resetWheel(); }
+function resetWheel(){ document.getElementById('steering-wheel').style.transform='rotate(0deg)'; }
 
-function doTurn(dir) {
-  heading = (heading + (dir==='left' ? -TURN_STEP : TURN_STEP) + 360) % 360;
-  document.getElementById('steering-wheel').style.transform =
-    `rotate(${dir==='left'?-38:38}deg)`;
-  roadview.setViewpoint({pan:heading, tilt:0, zoom:0});
-}
-function resetWheel() {
-  document.getElementById('steering-wheel').style.transform='rotate(0deg)';
+// ── 텔레포트 ──────────────────────────────────────────
+function teleportTo(lat, lng){
+  currentPos={lat,lng}; heading=0;
+  if(panorama){
+    panorama.setPosition(new naver.maps.LatLng(lat, lng));
+    setTimeout(()=>autoAlignHeading(), 500);
+  }
 }
 
 // ── MAP ───────────────────────────────────────────────
-function openMap() { document.getElementById('map-modal').classList.add('show'); }
-function closeMap() { document.getElementById('map-modal').classList.remove('show'); }
+function openMap(){ document.getElementById('map-modal').classList.add('show'); }
+function closeMap(){ document.getElementById('map-modal').classList.remove('show'); }
 
-function quickGo(lat, lng, name) {
-  currentPos={lat,lng}; heading=0;
+function quickGo(lat, lng, name){
   document.getElementById('loc-name').textContent=name+' · 서울';
   closeMap();
-  moveTo(lat, lng);
+  teleportTo(lat, lng);
 }
 
-function goByCoord() {
+function goByCoord(){
   const lat=parseFloat(document.getElementById('input-lat').value);
   const lng=parseFloat(document.getElementById('input-lng').value);
-  if (isNaN(lat)||isNaN(lng)||lat<33||lat>39||lng<124||lng>132) {
-    alert('올바른 한국 좌표를 입력해주세요');
-    return;
+  if(isNaN(lat)||isNaN(lng)||lat<33||lat>39||lng<124||lng>132){
+    alert('올바른 한국 좌표를 입력해주세요'); return;
   }
-  currentPos={lat,lng}; heading=0;
   document.getElementById('loc-name').textContent=lat.toFixed(4)+'°N, '+lng.toFixed(4)+'°E';
   closeMap();
-  moveTo(lat, lng);
+  teleportTo(lat, lng);
 }
 
-function setStatus(msg) { document.getElementById('status-bar').textContent=msg; }
+function setStatus(msg){ document.getElementById('status-bar').textContent=msg; }
 
 // ── 키보드 ────────────────────────────────────────────
 document.addEventListener('keydown',(e)=>{
