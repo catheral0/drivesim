@@ -70,6 +70,15 @@
   #coord-inputs input::placeholder { color:rgba(255,179,0,0.3); }
   #coord-go-btn { padding:12px; border-radius:8px; border:2px solid var(--green); background:rgba(0,230,118,0.05); color:var(--green); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; cursor:pointer; margin-top:4px; }
 
+  /* 깜빡임 방지 페이드 오버레이 */
+  #fade-overlay {
+    position:absolute; inset:0; z-index:9;
+    background:#0d0a05; opacity:0;
+    pointer-events:none;
+    transition: opacity 0.18s ease;
+  }
+  #fade-overlay.active { opacity:1; }
+
   #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
   #loading-screen h2 { font-size:0.8rem; letter-spacing:4px; color:var(--amber); }
   .loader-bar { width:160px; height:2px; background:rgba(255,179,0,0.2); border-radius:2px; overflow:hidden; }
@@ -92,6 +101,7 @@
   <div id="pillar-left"></div>
   <div id="pillar-right"></div>
   <div id="roadview"></div>
+  <div id="fade-overlay"></div>
   <div id="status-bar">■ ENGINE OFF</div>
 
   <div id="bus-dash">
@@ -329,17 +339,22 @@ function moveForward(){
 
     // panoId로 직접 이동
     const panoId = best.panoId || best.panoramaId;
-    if(panoId){
-      panorama.setPanoId(panoId);
-      setTimeout(()=>{ panorama.setPov({pan:heading, tilt:0, fov:100}); }, 250);
-    } else {
-      // fallback: 좌표 이동
-      const rad = heading * Math.PI / 180;
-      currentPos.lat += 0.00004 * Math.cos(rad);
-      currentPos.lng += 0.00004 * Math.sin(rad);
-      panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-      setTimeout(()=>{ panorama.setPov({pan:heading, tilt:0, fov:100}); }, 250);
-    }
+    const overlay = document.getElementById('fade-overlay');
+    overlay.classList.add('active');
+    setTimeout(()=>{
+      if(panoId){
+        panorama.setPanoId(panoId);
+      } else {
+        const rad = heading * Math.PI / 180;
+        currentPos.lat += 0.00004 * Math.cos(rad);
+        currentPos.lng += 0.00004 * Math.sin(rad);
+        panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
+      }
+      setTimeout(()=>{
+        panorama.setPov({pan:heading, tilt:0, fov:100});
+        setTimeout(()=>overlay.classList.remove('active'), 200);
+      }, 250);
+    }, 120);
   } catch(e){
     // fallback
     const rad = heading * Math.PI / 180;
