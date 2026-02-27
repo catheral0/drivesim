@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>버스 드라이브 시뮬레이터</title>
-<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=839a230b408a0505b1b525bdf2b8a2c1"></script>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=29c51fcad77ece70a722d4bb8955b70f&libraries=services"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -20,7 +20,7 @@
   #map-btn { height:44px; padding:0 14px; border-radius:10px; border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05); color:var(--amber); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; letter-spacing:2px; cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
 
   #main-container { flex:1; position:relative; overflow:hidden; }
-  #roadview { width:100%; height:100%; background:#1a1000; pointer-events:none; }
+  #roadview { width:100%; height:100%; background:#1a1000; }
 
   #pillar-left, #pillar-right { position:absolute; top:0; bottom:0; width:18px; z-index:8; background:linear-gradient(90deg,#1a1200,#2a1e00); }
   #pillar-left { left:0; border-right:2px solid #3a2800; }
