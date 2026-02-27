@@ -20,9 +20,9 @@
   #map-btn { height:44px; padding:0 14px; border-radius:10px; border:2px solid rgba(255,179,0,0.5); background:rgba(255,179,0,0.05); color:var(--amber); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; letter-spacing:2px; cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
 
   #main-container { flex:1; position:relative; overflow:hidden; }
-  #roadview { width:100%; height:100%; background:#1a1000; pointer-events:none; }
+  .rv-layer { position:absolute; inset:0; width:100%; height:100%; background:#0d0a05; pointer-events:none; transition: opacity 0.35s ease; }
   /* 네이버 로드뷰 기본 UI 완전 숨김 */
-  #roadview * { pointer-events:none !important; }
+  .rv-layer * { pointer-events:none !important; }
   .naver_roadview_btn_set, .naver_roadview_anchor, .naver_roadview_hotspot,
   .rdr_btn_set, .rdr_anchor, .rdr_hotspot,
   [class*="roadview_btn"], [class*="roadview_anchor"], [class*="roadview_hotspot"],
@@ -70,16 +70,7 @@
   #coord-inputs input::placeholder { color:rgba(255,179,0,0.3); }
   #coord-go-btn { padding:12px; border-radius:8px; border:2px solid var(--green); background:rgba(0,230,118,0.05); color:var(--green); font-family:'Orbitron',monospace; font-size:0.65rem; font-weight:700; cursor:pointer; margin-top:4px; }
 
-  /* 깜빡임 방지 페이드 오버레이 */
-  #fade-overlay {
-    position:absolute; inset:0; z-index:9;
-    background:#0d0a05; opacity:0;
-    pointer-events:none;
-    transition: opacity 0.18s ease;
-  }
-  #fade-overlay.active { opacity:1; }
-
-  #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
+    #loading-screen { position:absolute; inset:0; background:var(--dark); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200; gap:14px; }
   #loading-screen h2 { font-size:0.8rem; letter-spacing:4px; color:var(--amber); }
   .loader-bar { width:160px; height:2px; background:rgba(255,179,0,0.2); border-radius:2px; overflow:hidden; }
   .loader-fill { height:100%; background:var(--amber); box-shadow:0 0 8px var(--amber); animation:load 2s ease forwards; }
@@ -100,8 +91,8 @@
 <div id="main-container">
   <div id="pillar-left"></div>
   <div id="pillar-right"></div>
-  <div id="roadview"></div>
-  <div id="fade-overlay"></div>
+  <div id="rv-a" class="rv-layer"></div>
+  <div id="rv-b" class="rv-layer" style="opacity:0;"></div>
   <div id="status-bar">■ ENGINE OFF</div>
 
   <div id="bus-dash">
@@ -234,28 +225,79 @@ window.addEventListener('load', ()=>{
   }, 2000);
 });
 
+// 더블 버퍼링: A/B 두 개의 파노라마
+let panoA=null, panoB=null;
+let activeLayer='a'; // 현재 보이는 레이어
+let switching=false;
+
 function initPanorama(){
-  panorama = new naver.maps.Panorama('roadview', {
+  // A 레이어 (기본 표시)
+  panoA = new naver.maps.Panorama('rv-a', {
     position: new naver.maps.LatLng(DEFAULT_POS.lat, DEFAULT_POS.lng),
     pov: {pan:0, tilt:0, fov:100},
-    flightSpot: false,
-    logoControl: false,
-    zoomControl: false,
+    flightSpot: false, logoControl: false, zoomControl: false,
   });
 
-  naver.maps.Event.addListener(panorama, 'init', function(){
+  // B 레이어 (백그라운드 프리로드)
+  panoB = new naver.maps.Panorama('rv-b', {
+    position: new naver.maps.LatLng(DEFAULT_POS.lat, DEFAULT_POS.lng),
+    pov: {pan:0, tilt:0, fov:100},
+    flightSpot: false, logoControl: false, zoomControl: false,
+  });
+
+  panorama = panoA; // 현재 활성 파노라마
+
+  naver.maps.Event.addListener(panoA, 'init', function(){
     autoAlignHeading();
   });
 
-  naver.maps.Event.addListener(panorama, 'position_changed', function(){
-    const pos = panorama.getPosition();
-    if(pos){
-      currentPos.lat = pos.lat();
-      currentPos.lng = pos.lng();
-      document.getElementById('loc-name').textContent =
-        currentPos.lat.toFixed(4)+'°N, '+currentPos.lng.toFixed(4)+'°E';
-    }
-  });
+  naver.maps.Event.addListener(panoA, 'position_changed', updatePos);
+  naver.maps.Event.addListener(panoB, 'position_changed', updatePos);
+}
+
+function updatePos(){
+  const pos = panorama.getPosition();
+  if(pos){
+    currentPos.lat = pos.lat();
+    currentPos.lng = pos.lng();
+    document.getElementById('loc-name').textContent =
+      currentPos.lat.toFixed(4)+'°N, '+currentPos.lng.toFixed(4)+'°E';
+  }
+}
+
+// 더블 버퍼 스왑: 백그라운드에 로드 후 크로스페이드
+function loadNextAndSwap(panoId, position){
+  if(switching) return;
+  switching = true;
+
+  const bgPano = activeLayer==='a' ? panoB : panoA;
+  const bgId   = activeLayer==='a' ? 'rv-b' : 'rv-a';
+  const fgId   = activeLayer==='a' ? 'rv-a' : 'rv-b';
+
+  // 백그라운드 레이어에 다음 파노라마 로드
+  if(panoId){
+    bgPano.setPanoId(panoId);
+  } else if(position){
+    bgPano.setPosition(position);
+  }
+  bgPano.setPov({pan:heading, tilt:0, fov:100});
+
+  // 로드 완료 대기 후 크로스페이드
+  setTimeout(()=>{
+    bgPano.setPov({pan:heading, tilt:0, fov:100});
+    // 크로스페이드: bg 페이드인, fg 페이드아웃
+    document.getElementById(bgId).style.zIndex = 2;
+    document.getElementById(fgId).style.zIndex = 1;
+    document.getElementById(bgId).style.opacity = 1;
+    document.getElementById(fgId).style.opacity = 0;
+
+    // 스왑 완료
+    setTimeout(()=>{
+      panorama = bgPano;
+      activeLayer = activeLayer==='a' ? 'b' : 'a';
+      switching = false;
+    }, 380);
+  }, 300);
 }
 
 // ── 자동 방향 정렬 ────────────────────────────────────
@@ -339,22 +381,11 @@ function moveForward(){
 
     // panoId로 직접 이동
     const panoId = best.panoId || best.panoramaId;
-    const overlay = document.getElementById('fade-overlay');
-    overlay.classList.add('active');
-    setTimeout(()=>{
-      if(panoId){
-        panorama.setPanoId(panoId);
-      } else {
-        const rad = heading * Math.PI / 180;
-        currentPos.lat += 0.00004 * Math.cos(rad);
-        currentPos.lng += 0.00004 * Math.sin(rad);
-        panorama.setPosition(new naver.maps.LatLng(currentPos.lat, currentPos.lng));
-      }
-      setTimeout(()=>{
-        panorama.setPov({pan:heading, tilt:0, fov:100});
-        setTimeout(()=>overlay.classList.remove('active'), 200);
-      }, 250);
-    }, 120);
+    const rad2 = heading * Math.PI / 180;
+    const nx = currentPos.lat + 0.00004*Math.cos(rad2);
+    const ny = currentPos.lng + 0.00004*Math.sin(rad2);
+    const nextPos = new naver.maps.LatLng(nx, ny);
+    loadNextAndSwap(panoId, nextPos);
   } catch(e){
     // fallback
     const rad = heading * Math.PI / 180;
@@ -380,10 +411,9 @@ function resetWheel(){ document.getElementById('steering-wheel').style.transform
 // ── 텔레포트 ──────────────────────────────────────────
 function teleportTo(lat, lng){
   currentPos={lat,lng}; heading=0;
-  if(panorama){
-    panorama.setPosition(new naver.maps.LatLng(lat, lng));
-    setTimeout(()=>autoAlignHeading(), 500);
-  }
+  const pos = new naver.maps.LatLng(lat, lng);
+  loadNextAndSwap(null, pos);
+  setTimeout(()=>autoAlignHeading(), 800);
 }
 
 // ── MAP ───────────────────────────────────────────────
